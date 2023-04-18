@@ -13,17 +13,25 @@ for (package in libs) {
   require(package, character.only = T)
 }
 
-get_data <- function() {
-  # get the metadata
-  gse3 <- GEOquery::getGEO("GSE150450", GSEMatrix = TRUE)
-  meta3 <- pData(gse3[[1]])
+
+
+################################# 
+######## SET UP THE DATA ######## 
+################################# 
+
+get_md <- function() {
+  meta <- read.table('data/meta.csv', sep=',', header=TRUE, row.names = 1)
+  return(meta)
+}
+
+get_data <- function(meta) {
   
   # divide samples up to prep for DESEQ2 analysis
-  male_titles <- meta3[meta3$'Sex:ch1' == 'male','title'] 
+  male_titles <- meta[meta$'Sex.ch1' == 'male','title'] 
   # remove the male outlier
   male_titles <- male_titles[! male_titles %in% c('CAL2M')]
-  female_titles <- meta3[meta3$'Sex:ch1' == 'female','title']
-  larvae_titles <- meta3[meta3$'lifestage:ch1' == 'larvae','title']
+  female_titles <- meta[meta$'Sex.ch1' == 'female','title']
+  larvae_titles <- meta[meta$'lifestage.ch1' == 'larvae','title']
   
   # load in counts
   counts <- read.csv('data/GSE150450_gene_count_matrix.csv')
@@ -38,12 +46,9 @@ get_data <- function() {
   return(list(male_counts, female_counts, larvae_counts))
 }
 
-get_md <- function() {
-  meta <- read.table('data/meta.csv', sep=',', header=TRUE, row.names = 1)
-  return(meta)
-}
-
-##### DESEQ2 #####
+########################
+######## DESEQ2 ######## 
+########################
 
 # get the col_data to input into the DESeq2 analysis
 get_col_data <- function(counts, md) {
@@ -73,14 +78,11 @@ run_deseq <- function(count_dataframe, coldata, count_filter, condition_name) {
   # make deseqdataset object
   dds <- DESeqDataSetFromMatrix(countData = as.matrix(count_dataframe),
                                 colData = coldata,
-                                design = ~ condition)
+                                design = ~ timepoint + condition + timepoint:condition)
   
   # filter for rows with at least the number of reads indicated by count_filter
   keep <- rowSums(counts(dds)) >= count_filter
   dds <- dds[keep,]
-  
-  # account for timepoint
-  design(dds) <- formula(~ timepoint + condition + timepoint:condition)
   
   # do differential expression analysis
   dds <- DESeq(dds, test="LRT", reduced=~ timepoint + condition)
@@ -91,7 +93,7 @@ run_deseq <- function(count_dataframe, coldata, count_filter, condition_name) {
   return(results)
 }
 
-# get genes that are significantly differentially expressed (padj < 0.01)
+# get genes that are significant(padj < 0.01)
 de_genes <- function(deseq_results){
   deseq_results <- deseq_results[!is.na(deseq_results$padj),]
   de_genes <- row.names(deseq_results[deseq_results$padj < 0.01,])

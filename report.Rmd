@@ -12,8 +12,13 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## R Markdown
 
+```{r getting metadata}
+meta <- get_md()
+head(meta)
+```
+
 ```{r prep counts data}
-counts <- get_data()
+counts <- get_data(meta)
 
 male_counts = counts[1][[1]]
 female_counts = counts[2][[1]]
@@ -23,10 +28,6 @@ head(female_counts)
 
 ```
 
-```{r getting metadata}
-meta <- get_md()
-head(meta)
-```
 
 ```{r DESeq2}
 deseq_results_male <- run_deseq(male_counts, get_col_data(male_counts, meta), 
