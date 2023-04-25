@@ -14,7 +14,16 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r getting metadata}
 meta <- get_md()
-head(meta)
+meta_filtered <- filter_md(meta)
+head(meta_filtered)
+```
+```{r summarizing metadata}
+meta_summary <- summarize_md(meta_filtered)
+meta_summary
+```
+```{r visualizing metadata}
+barplot <- visualize_md(meta_filtered, 'Lifestage', 'Timepoint')
+barplot
 ```
 
 ```{r prep counts data}

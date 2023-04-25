@@ -3,7 +3,7 @@
 ## BF591 Final Project
 ## Analysis
 
-libs <- c("GEOquery", "tidyverse", "ggVennDiagram", "BiocManager",
+libs <- c("GEOquery", "tidyverse", "RColorBrewer", "ggVennDiagram", "BiocManager",
           "DESeq2")
 
 for (package in libs) {
@@ -19,13 +19,92 @@ for (package in libs) {
 ######## SET UP THE DATA ######## 
 ################################# 
 
+################################
+## FUNCTIONS FOR METADATA TAB ##
+################################
+
 get_md <- function() {
+  # read in the metadata
   meta <- read.table('data/meta.csv', sep=',', header=TRUE, row.names = 1)
   return(meta)
 }
 
-get_data <- function(meta) {
+filter_md <- function(md) {
+  # filters the metadata to only the relevant columns for display in app
+  keeps <- c('title', 'geo_accession', 'source_name_ch1', 'organism_ch1', 
+            'molecule_ch1', 'platform_id', 'library_selection', 
+            'library_source', 'library_strategy', 'lifestage.ch1', 'Sex.ch1', 
+            'timepoint.ch1', 'treatment.ch1')
   
+  md_filtered <- md %>%
+    dplyr::select(all_of(keeps)) %>%  # get the keeps columns
+    dplyr::rename('Sample name' = title,  # clean up the column names
+                  'GEO Accession' = geo_accession,
+                  'Source' = source_name_ch1,
+                  Organism = organism_ch1,
+                  Molecule = molecule_ch1,
+                  'Platform ID' = platform_id,
+                  'Library Selection' = library_selection,
+                  'Library Source' = library_source,
+                  'Library Strategy' = library_strategy,
+                  'Lifestage' = 'lifestage.ch1',
+                  'Sex' = 'Sex.ch1',
+                  'Timepoint' = 'timepoint.ch1',
+                  'Treatment' = 'treatment.ch1')
+  
+  # return as tibble to get rid of rownames
+  return(tibble(md_filtered))
+
+}
+
+get_levels <- function(row){
+  # helper function to return the levels of a row that is a factor
+  row_levels <- levels(factor(row))
+  return(paste(row_levels, collapse = ", "))
+}
+
+summarize_md <- function(md) {
+  # create a summarized version of the metadata
+  removes <- c('Sample name', 'GEO Accession')
+    
+  md_factors <- md %>%
+    dplyr::select(!all_of(removes))  %>% # further restrict columns
+    t() # transpose
+  
+  # create the summary
+  md_summary <- tibble(
+    'Column Name' = rownames(md_factors),
+    'Type' = 'factor',
+    'Distinct Values' = apply(md_factors, 1, get_levels)
+  )
+  
+  return(md_summary)
+  
+}
+
+visualize_md <- function(md, group, metric) {
+  # visualize how the samples are broken down into different groups
+  barplot <- ggplot(md, aes(fill=!!sym(metric), x=!!sym(group))) + 
+    geom_bar(stat="count", 
+             width=0.8) +
+    labs(y=paste("Count of", metric),
+         x=group,
+         fill='',
+         title=paste("Count of", metric, "per", group)) +
+    theme_classic(base_size = 16) +
+    theme(axis.ticks.x=element_blank(),
+          axis.ticks.y=element_line(color='gray'),
+          axis.line.x=element_line(color="gray"),
+          axis.line.y=element_line(color="gray")) +
+    scale_fill_brewer(palette="Dark2") +
+    geom_text(aes(label = after_stat(count)), 
+              stat = "count", 
+              position = position_stack(vjust = 0.5),
+              color="gray16")
+  return(barplot)
+}
+
+get_data <- function(meta) {
   # divide samples up to prep for DESEQ2 analysis
   male_titles <- meta[meta$'Sex.ch1' == 'male','title'] 
   # remove the male outlier
