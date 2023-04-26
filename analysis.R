@@ -3,7 +3,7 @@
 ## BF591 Final Project
 ## Analysis
 
-libs <- c("GEOquery", "tidyverse", "RColorBrewer", "ggVennDiagram", "BiocManager",
+libs <- c("gplots", "GEOquery", "tidyverse", "RColorBrewer", "ggVennDiagram", "BiocManager",
           "DESeq2")
 
 for (package in libs) {
@@ -120,11 +120,14 @@ get_data <- function(meta) {
   counts <- read.csv('data/GSE150450_gene_count_matrix.csv')
   # turn gene_ids into rownames
   rownames(counts) <- counts$gene_id
-  counts = subset(counts, select = -c(gene_id))
+  counts <- subset(counts, select = -c(gene_id))
   
   male_counts <- counts[,male_titles]
   female_counts <- counts[,female_titles]
   larvae_counts <- counts[,larvae_titles]
+  
+  # put all counts back together, excluding male outlier
+  # all_counts <- cbind(male_counts, female_counts, larvae_counts)
   
   return(list(male_counts, female_counts, larvae_counts, counts))
 }
@@ -204,6 +207,7 @@ scatter_plot1 <- function(counts_data, slider_var, slider_nonzero){
   # genes filtered out are lighter
   # scatter_plot1: median count vs variance (consider log scale for plot)
   # scatter_plot2: median count vs number of zeros
+  counts_data <- prep_scatter_data(counts_data)
   
   # find the percentile cut-off for variance
   percentile_cutoff <- quantile(counts_data$variance, probs = slider_var)
@@ -214,14 +218,14 @@ scatter_plot1 <- function(counts_data, slider_var, slider_nonzero){
                   'FALSE')
   
   scatter1 <- ggplot(counts_data,
-                     aes(x=log10(variance),y=log10(median_count),color=color)) +
+                     aes(x=log10(median_count),y=log10(variance),color=color)) +
     geom_point(size=1.5) +
     theme_bw() +
     scale_color_manual(values = c('FALSE' = "lightblue", 'TRUE' = "darkblue")) +
-    ggtitle('Median Count vs. Variance') +
+    ggtitle('Relationship Between Variance and Median Count') +
     labs(color='Passes Filtering Conditions',
-         x=expression("log"[10]*"Variance"),
-         y=expression("log"[10]*"Median Count"))
+         x=expression("log"[10]*"Median Count"),
+         y=expression("log"[10]*"Variance"))
   
   return(scatter1)
   
@@ -232,6 +236,7 @@ scatter_plot2 <- function(counts_data, slider_var, slider_nonzero){
   # genes filtered out are lighter
   # scatter_plot1: median count vs variance (consider log scale for plot)
   # scatter_plot2: median count vs number of zeros
+  counts_data <- prep_scatter_data(counts_data)
   
   # find the percentile cut-off for variance
   percentile_cutoff <- quantile(counts_data$variance, probs = slider_var)
@@ -242,16 +247,75 @@ scatter_plot2 <- function(counts_data, slider_var, slider_nonzero){
                   'FALSE')
   
   scatter2 <- ggplot(counts_data,
-                     aes(x=num_zero,y=log10(median_count),color=color)) +
+                     aes(x=log10(median_count),y=num_zero,color=color)) +
     geom_point(size=1.5) +
     theme_bw() +
     scale_color_manual(values = c('FALSE' = "lightblue", 'TRUE' = "darkblue")) +
-    ggtitle('Median Count vs. Number of Zero Samples') +
+    ggtitle('Relationship Between Variance and Number of Zero Samples') +
     labs(color='Passes Filtering Conditions',
-         x="Number of Zero Samples",
-         y=expression("log"[10]*"Median Count"))
+         x=expression("log"[10]*"Median Count"),
+         y="Number of Zero Samples")
   
   return(scatter2)
+  
+}
+
+plot_heatmap <- function(counts_data, meta, slider_var, slider_nonzero){
+  # get information we need to filter out genes
+  counts_data <- prep_scatter_data(counts_data)
+  
+  # find the percentile cut-off for variance
+  percentile_cutoff <- quantile(counts_data$variance, probs = slider_var)
+  
+  # now apply the filters
+  counts_filtered <- counts_data %>%
+    dplyr::filter(variance >= percentile_cutoff,
+                  num_nonzero >= slider_nonzero) %>%
+    dplyr::select(-c('variance', 'num_nonzero', 'num_zero', 'median_count')) # can get rid of these cols now
+  
+  # log scale the counts
+  counts_log_scale <- log10(counts_filtered + 1)
+  
+  # get rowsidecolors
+  meta <- meta %>%
+    # dplyr::filter(title != 'CAL2M') %>% # remove outlier
+    dplyr::mutate('color_bar' = case_when((Sex.ch1 == 'female') ~ 'orange',
+                                          (Sex.ch1 == 'male') ~ 'purple',
+                                          (Sex.ch1 == 'unknown') ~ 'gray'))
+  
+  
+  return(gplots::heatmap.2(as.matrix(counts_log_scale), 
+                           scale="row",
+                           labCol=FALSE,
+                           labRow=FALSE,
+                           key=TRUE,
+                           trace="none",
+                           ColSideColors=meta$color_bar,
+                           col=brewer.pal(11, "RdYlBu")))
+}
+
+plot_pca <- function(counts_data, meta, slider_var, slider_nonzero){
+  # log scale the data
+  counts_data <- log10(counts_data + 1)
+
+  # perform PCA
+  pca_results <- prcomp(t(counts_data), center=TRUE, scale=FALSE)
+  
+  # pull out columns of interest and label rows
+  md_cut <- meta %>% 
+    dplyr::select("treatment.ch1", "Sex.ch1", "geo_accession", "title")
+  
+  row.names(md_cut) <- md_cut$title
+  
+  # ready to make plot
+  pca_biplot <- pca_results$x %>%
+    merge(md_cut, by = 'row.names') %>% # add metadata
+    ggplot(aes(x=PC1, y=PC2, color=treatment.ch1, shape=Sex.ch1)) +
+    geom_point() +
+    scale_colour_brewer(palette="Dark2") +
+    theme_classic() 
+  
+  return(pca_biplot)
   
 }
 
