@@ -32,11 +32,29 @@ counts <- get_data(meta)
 male_counts = counts[1][[1]]
 female_counts = counts[2][[1]]
 larvae_counts = counts[3][[1]]
+all_counts = counts[4][[1]]
 
-head(female_counts)
+head(all_counts)
 
 ```
+```{r test filters}
+counts_filtered <- filter_counts(all_counts, 0.5, 60)
 
+counts_filtered
+
+```
+```{r scatter1}
+scatter1 <- scatter_plot1(prep_scatter_data(all_counts), 0.5, 60)
+
+scatter1
+
+```
+```{r scatter2}
+scatter2 <- scatter_plot2(prep_scatter_data(all_counts), 0.5, 60)
+
+scatter2
+
+```
 
 ```{r DESeq2}
 deseq_results_male <- run_deseq(male_counts, get_col_data(male_counts, meta), 

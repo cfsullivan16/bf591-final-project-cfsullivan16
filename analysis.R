@@ -104,6 +104,10 @@ visualize_md <- function(md, group, metric) {
   return(barplot)
 }
 
+################################
+### FUNCTIONS FOR COUNTS TAB ###
+################################
+
 get_data <- function(meta) {
   # divide samples up to prep for DESEQ2 analysis
   male_titles <- meta[meta$'Sex.ch1' == 'male','title'] 
@@ -122,7 +126,133 @@ get_data <- function(meta) {
   female_counts <- counts[,female_titles]
   larvae_counts <- counts[,larvae_titles]
   
-  return(list(male_counts, female_counts, larvae_counts))
+  return(list(male_counts, female_counts, larvae_counts, counts))
+}
+
+filter_counts <- function(counts_data, slider_var, slider_nonzero){
+  # takes in filtering conditions and spits out a dataframe containing
+  # summary info about filtering results
+  
+  # get initial number of samples and genes
+  num_samps <- ncol(counts_data)
+  num_genes <- nrow(counts_data)
+  
+  # first, calculate variance and number of non-zero samples
+  variance <- apply(counts_data, 1, var)
+  num_zero <- rowSums(counts_data!=0)
+  
+  counts_data <- counts_data %>% 
+    dplyr::mutate('variance'=variance,
+                  'num_nonzero'=num_zero)
+  
+  # find the percentile cut-off for variance
+  percentile_cutoff <- quantile(counts_data$variance, probs = slider_var)
+  
+  # now apply the filters
+  counts_filtered <- counts_data %>%
+    dplyr::filter(variance >= percentile_cutoff,
+                  num_nonzero >= slider_nonzero) %>%
+    dplyr::select(-c('variance', 'num_nonzero')) # can get rid of these cols now
+  
+  # calculate number that passed and failed
+  num_genes_passed <- nrow(counts_filtered)
+  num_genes_failed <- num_genes - num_genes_passed
+  
+  # make the final table
+  sum_table <- tibble(
+    "Number of Samples" = scales::comma(num_samps),
+    "Number of Genes" = scales::comma(num_genes),
+    "Genes Passing Current Filter" = paste(scales::comma(num_genes_passed), 
+                                           " (",
+                                           round((num_genes_passed/num_genes)*100, digits=2),
+                                           "%)", sep=""),
+    "Genes NOT Passing Current Filter" = paste(scales::comma(num_genes_failed),
+                                               " (",
+                                               round((num_genes_failed/num_genes)*100, digits=2),
+                                               "%)", sep="")
+  )
+  
+  # transpose the table for readability
+  sum_table <- t(as.data.frame(sum_table))
+  colnames(sum_table) = 'Result'
+  sum_table <- sum_table %>% as_tibble(rownames='Metric')
+  
+  return(sum_table)
+  
+}
+
+prep_scatter_data <- function(counts_data){
+  # get necessary columns to make both scatter plots
+  # first, calculate variance and number of zero samples and nonzero samples
+  variance <- apply(counts_data, 1, var)
+  num_zero <- rowSums(counts_data==0)
+  num_nonzero <- rowSums(counts_data!=0)
+  
+  # get median, then add other cols
+  counts_data <- counts_data %>% 
+    dplyr::mutate('median_count'=apply(., 1, median, na.rm=TRUE)) %>%
+    dplyr::mutate('variance'=variance,
+                  'num_zero'=num_zero,
+                  'num_nonzero'=num_nonzero)
+  
+  return(counts_data)
+  
+}
+
+scatter_plot1 <- function(counts_data, slider_var, slider_nonzero){
+  # diagnostic scatter plots - genes passing filters marked in a darker color,
+  # genes filtered out are lighter
+  # scatter_plot1: median count vs variance (consider log scale for plot)
+  # scatter_plot2: median count vs number of zeros
+  
+  # find the percentile cut-off for variance
+  percentile_cutoff <- quantile(counts_data$variance, probs = slider_var)
+  
+  # create color vector
+  color <- ifelse(counts_data['num_nonzero']>=slider_nonzero & counts_data['variance']>=percentile_cutoff, 
+                  'TRUE', 
+                  'FALSE')
+  
+  scatter1 <- ggplot(counts_data,
+                     aes(x=log10(variance),y=log10(median_count),color=color)) +
+    geom_point(size=1.5) +
+    theme_bw() +
+    scale_color_manual(values = c('FALSE' = "lightblue", 'TRUE' = "darkblue")) +
+    ggtitle('Median Count vs. Variance') +
+    labs(color='Passes Filtering Conditions',
+         x=expression("log"[10]*"Variance"),
+         y=expression("log"[10]*"Median Count"))
+  
+  return(scatter1)
+  
+}
+
+scatter_plot2 <- function(counts_data, slider_var, slider_nonzero){
+  # diagnostic scatter plots - genes passing filters marked in a darker color,
+  # genes filtered out are lighter
+  # scatter_plot1: median count vs variance (consider log scale for plot)
+  # scatter_plot2: median count vs number of zeros
+  
+  # find the percentile cut-off for variance
+  percentile_cutoff <- quantile(counts_data$variance, probs = slider_var)
+  
+  # create color vector
+  color <- ifelse(counts_data['num_nonzero']>=slider_nonzero & counts_data['variance']>=percentile_cutoff, 
+                  'TRUE', 
+                  'FALSE')
+  
+  scatter2 <- ggplot(counts_data,
+                     aes(x=num_zero,y=log10(median_count),color=color)) +
+    geom_point(size=1.5) +
+    theme_bw() +
+    scale_color_manual(values = c('FALSE' = "lightblue", 'TRUE' = "darkblue")) +
+    ggtitle('Median Count vs. Number of Zero Samples') +
+    labs(color='Passes Filtering Conditions',
+         x="Number of Zero Samples",
+         y=expression("log"[10]*"Median Count"))
+  
+  return(scatter2)
+  
 }
 
 ########################
