@@ -13,8 +13,6 @@ for (package in libs) {
   require(package, character.only = T)
 }
 
-
-
 ################################# 
 ######## SET UP THE DATA ######## 
 ################################# 
@@ -218,9 +216,9 @@ scatter_plot1 <- function(counts_data, slider_var, slider_nonzero){
                   'FALSE')
   
   scatter1 <- ggplot(counts_data,
-                     aes(x=log10(median_count),y=log10(variance),color=color)) +
+                     aes(x=log10(median_count + 1),y=log10(variance + 1),color=color)) +
     geom_point(size=1.5) +
-    theme_bw() +
+    theme_bw(base_size = 16) +
     scale_color_manual(values = c('FALSE' = "lightblue", 'TRUE' = "darkblue")) +
     ggtitle('Relationship Between Variance and Median Count') +
     labs(color='Passes Filtering Conditions',
@@ -247,9 +245,9 @@ scatter_plot2 <- function(counts_data, slider_var, slider_nonzero){
                   'FALSE')
   
   scatter2 <- ggplot(counts_data,
-                     aes(x=log10(median_count),y=num_zero,color=color)) +
+                     aes(x=log10(median_count + 1),y=num_zero,color=color)) +
     geom_point(size=1.5) +
-    theme_bw() +
+    theme_bw(base_size = 16) +
     scale_color_manual(values = c('FALSE' = "lightblue", 'TRUE' = "darkblue")) +
     ggtitle('Relationship Between Variance and Number of Zero Samples') +
     labs(color='Passes Filtering Conditions',
@@ -274,7 +272,7 @@ plot_heatmap <- function(counts_data, meta, slider_var, slider_nonzero){
     dplyr::select(-c('variance', 'num_nonzero', 'num_zero', 'median_count')) # can get rid of these cols now
   
   # log scale the counts
-  counts_log_scale <- log10(counts_filtered + 1)
+  counts_log_scale <- log2(counts_filtered + 1)
   
   # get rowsidecolors
   meta <- meta %>%
@@ -294,26 +292,39 @@ plot_heatmap <- function(counts_data, meta, slider_var, slider_nonzero){
                            col=brewer.pal(11, "RdYlBu")))
 }
 
-plot_pca <- function(counts_data, meta, slider_var, slider_nonzero){
+plot_pca <- function(counts_data, meta, dim1, dim2){
   # log scale the data
   counts_data <- log10(counts_data + 1)
 
   # perform PCA
   pca_results <- prcomp(t(counts_data), center=TRUE, scale=FALSE)
   
+  # get variance explained
+  # first get the variance
+  variance <- pca_results$sdev**2
+  
+  # now turn into % explained variance
+  percent_explained <- round((variance / sum(variance))*100)
+  
   # pull out columns of interest and label rows
   md_cut <- meta %>% 
-    dplyr::select("treatment.ch1", "Sex.ch1", "geo_accession", "title")
+    dplyr::select("treatment.ch1", "Sex.ch1", "timepoint.ch1", "geo_accession", "title")
   
   row.names(md_cut) <- md_cut$title
   
   # ready to make plot
   pca_biplot <- pca_results$x %>%
     merge(md_cut, by = 'row.names') %>% # add metadata
-    ggplot(aes(x=PC1, y=PC2, color=treatment.ch1, shape=Sex.ch1)) +
-    geom_point() +
-    scale_colour_brewer(palette="Dark2") +
-    theme_classic() 
+    ggplot(aes(x=!!sym(paste('PC', dim1, sep='')), y=!!sym(paste('PC', dim2, sep='')), color=treatment.ch1, shape=Sex.ch1)) +
+    geom_point(size=2) +
+    theme_classic(base_size = 16) +
+    ggtitle(paste("Raw Counts PCA for", 'PC', dim1, 'vs.', 'PC', dim2)) +
+    labs(x=paste('PC', dim1, ': ', percent_explained[dim1], '% variance', sep=""),
+         y=paste('PC', dim2, ': ', percent_explained[dim2], '% variance', sep=""),
+         color='Treatment',
+         shape='Sex') +
+    scale_shape_discrete(labels=c('Female', 'Male', 'Larvae')) +
+    scale_colour_brewer(palette="Dark2", labels=c('Control', 'Fluctuating'))
   
   return(pca_biplot)
   

@@ -8,6 +8,7 @@ source("analysis.R")
 # load libraries
 library(shiny)
 library(DT)
+library(shinycssloaders)
 
 options(shiny.maxRequestSize=6*1024^2)
 
@@ -77,6 +78,28 @@ ui <- fluidPage(
                  sliderInput('slider_nonzero', 
                              'Select minimum non-zero samples:', 
                               min=0, max=80, value=8),
+                 # slider to aggregate or dis-aggregate
+                 #radioButtons('counts_ag', 
+                 #            'Choose whether to disaggregate by male, female, larval:',
+                 #              choices=c('Aggregate', 'Disaggregate'),
+                 #              selected='Aggregate'),
+                 numericInput(
+                   'counts_pcdim1',
+                   'Select Principal Component for the x-axis:',
+                   1,
+                   min = 1,
+                   max = 80,
+                   step = 1,
+                 ),
+                 
+                 numericInput(
+                   'counts_pcdim2',
+                   'Select Principal Component for the y-axis:',
+                   2,
+                   min = 1,
+                   max = 80,
+                   step = 1,
+                 ),
                  
                  # plot button
                  actionButton('counts_button', 'Plot', icon= icon('chart-line'), width='100%')
@@ -89,12 +112,12 @@ ui <- fluidPage(
                    tabPanel("Summary",
                             tableOutput("counts_summary")),
                    tabPanel("Scatter Plots",
-                            plotOutput("counts_scatter1"),
-                            plotOutput("counts_scatter2")),
+                            withSpinner(plotOutput("counts_scatter1")),
+                            withSpinner(plotOutput("counts_scatter2"))),
                    tabPanel("Heatmap",
-                            plotOutput("counts_heatmap")),
+                            withSpinner(plotOutput("counts_heatmap"))),
                    tabPanel("PCA",
-                            plotOutput("counts_pca"))
+                            withSpinner(plotOutput("counts_pca")))
                )
              ))
     ),
@@ -231,12 +254,12 @@ server <- function(input, output) {
       counts <- load_counts_data()
       
       isolate({
-        scatter_plot1(prep_scatter_data(counts),
+        scatter_plot1(counts,
                       input$slider_var/100, 
                       input$slider_nonzero)
       })
       
-    })
+    }, width=725)
     
     output$counts_scatter2 <- renderPlot({
       # make sure no error pops up before data uploaded
@@ -248,12 +271,56 @@ server <- function(input, output) {
       counts <- load_counts_data()
       
       isolate({
-        scatter_plot2(prep_scatter_data(counts),
+        scatter_plot2(counts,
                       input$slider_var/100, 
                       input$slider_nonzero)
       })
       
-    })
+    }, width=725)
+    
+    ### MAKING HEATMAP ###
+    output$counts_heatmap <- renderPlot({
+      # make sure no error pops up before data uploaded
+      req(input$sample_data)
+      req(input$counts_data)
+      
+      # take dependency on button
+      input$counts_button
+      
+      counts <- load_counts_data()
+      md <- load_sample_data()
+      
+      isolate({
+        plot_heatmap(counts,
+                      md,
+                      input$slider_var/100, 
+                      input$slider_nonzero)
+      })
+      
+    }, width=600, height=600)
+    
+    ### MAKING PCA ###
+    output$counts_pca <- renderPlot({
+      # make sure no error pops up before data uploaded
+      req(input$sample_data)
+      req(input$counts_data)
+      
+      input$counts_button
+      
+      counts <- load_counts_data()
+      md <- load_sample_data()
+      
+      isolate({
+        plot_pca(counts,
+                 md,
+                 input$counts_pcdim1,
+                 input$counts_pcdim2)
+      })
+      
+    }, width=700, height=500)
+    
+    
+    
 }
 
 # Run the application 
