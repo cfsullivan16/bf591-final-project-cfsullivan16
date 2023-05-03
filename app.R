@@ -18,7 +18,9 @@ ui <- fluidPage(
   # Define title for the app and explain usage
   titlePanel(
     div(h2('Molecular mechanisms underlying plasticity in a thermally varying environment'), 
-        h4("To use this application..."))
+        h4("To use this application first upload the sample information under the samples
+           tab and the counts information under the counts tab. Then, navigate through the
+           tabs and subtabs to explore the results."))
   ),
   
   # Define 4-5 main tabs
@@ -123,7 +125,33 @@ ui <- fluidPage(
     ),
     ########## TAB 3: DE ########## 
     tabPanel("DE",
-             # tableOutput('table'),
+             sidebarLayout(
+               # SIDEBAR: DE DATA
+               sidebarPanel(
+                 # file input
+                 # radio buttons
+                 # slider to choose dataset
+                 radioButtons('de_choice', 
+                             'Choose whether to view DESeq2 results for male, female, or larvae datasets:',
+                               choices=c('Male', 'Female', 'Larvae'),
+                               selected='Male'),
+                 
+                 # plot button
+                 actionButton('de_button', 'Plot', icon= icon('chart-line'), width='100%')
+               ),
+               
+               # MAIN PANEL: DE TABS
+               mainPanel(
+                 headerPanel(""),
+                 tabsetPanel(
+                   tabPanel("DE Results",
+                            DT::dataTableOutput("de_results", width="100%")),
+                   tabPanel("Vocano plot",
+                            withSpinner(plotOutput("de_volcano"))),
+                   tabPanel("Venn diagrams",
+                            withSpinner(plotOutput("de_venn"))),
+                 )
+               ))
     ),
     ########## TAB 4: CLUSTERING ########## 
     tabPanel("Clustering",
@@ -173,7 +201,20 @@ server <- function(input, output) {
     
     return(counts)
   })
+  
+  ### LOADING THE DE DATA ###
+  load_de_data <- reactive({
+    if (input$de_choice == 'Male'){
+      id <- 'm'
+    } else if (input$de_choice == 'Female'){
+      id <- 'f'
+    } else if (input$de_choice == 'Larvae'){
+      id <- 'l'
+    }
     
+    deseq_res <- readRDS(paste('objects/deseq_', id, '_fluctvsctrl', sep=""))
+    
+  })
     
     ### MAKING SAMPLE SUMMARY TABLE ###
     output$sample_summary <- renderTable({
@@ -278,7 +319,7 @@ server <- function(input, output) {
       
     }, width=725)
     
-    ### MAKING HEATMAP ###
+    ### MAKING COUNTS HEATMAP ###
     output$counts_heatmap <- renderPlot({
       # make sure no error pops up before data uploaded
       req(input$sample_data)
@@ -299,7 +340,7 @@ server <- function(input, output) {
       
     }, width=600, height=600)
     
-    ### MAKING PCA ###
+    ### MAKING COUNTS PCA ###
     output$counts_pca <- renderPlot({
       # make sure no error pops up before data uploaded
       req(input$sample_data)
@@ -318,6 +359,23 @@ server <- function(input, output) {
       })
       
     }, width=700, height=500)
+    
+    ### MAKING DE DATA TABLE ###
+    output$de_results <- DT::renderDataTable({
+      # make it so input data is required
+      req(input$counts_data)
+      req(input$sample_data)
+      
+      # take a dependency on the plot button
+      input$de_button
+      
+      # load in data given selected dataset
+      de <- load_de_data()
+      
+      # make data table
+      DT::datatable(de)
+      
+    })
     
     
     
