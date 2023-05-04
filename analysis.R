@@ -384,3 +384,27 @@ de_genes <- function(deseq_results){
   return(de_genes)
 }
 
+# create the volcano plot - similar to assignment 7
+volcano <- function(dataf, x_name, y_name, slider, color1, color2){
+  
+  # make sure no na values for x or y
+  dataf_filtered <- dataf %>% 
+    drop_na(c(!!sym(x_name), !!sym(y_name))) %>%
+    dplyr::filter(!!sym(y_name) > 0)
+  
+  # make color labels
+  color <- ifelse(dataf_filtered[y_name] < 1 * 10^slider, 'TRUE', 'FALSE')
+  
+  volc <- dataf_filtered %>%
+    ggplot(mapping=aes(x=!!sym(x_name), y=-log10(!!sym(y_name)), color=color)) +
+    geom_point(size=1.5) +
+    theme_bw() + 
+    scale_color_manual(values = c('FALSE' = color1, 'TRUE' = color2)) +
+    labs(color=paste(y_name, '< 1e', slider),
+         x=x_name,
+         y=paste("-log(", y_name, ")", sep='')) +
+    theme(legend.position="bottom")
+  
+  return(volc)
+}
+  

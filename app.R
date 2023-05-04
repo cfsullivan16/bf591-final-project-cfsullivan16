@@ -7,6 +7,7 @@ source("analysis.R")
 
 # load libraries
 library(shiny)
+library(colourpicker)
 library(DT)
 library(shinycssloaders)
 
@@ -128,13 +129,47 @@ ui <- fluidPage(
              sidebarLayout(
                # SIDEBAR: DE DATA
                sidebarPanel(
-                 # file input
-                 # radio buttons
-                 # slider to choose dataset
+                 # buttons to choose dataset
                  radioButtons('de_choice', 
                              'Choose whether to view DESeq2 results for male, female, or larvae datasets:',
                                choices=c('Male', 'Female', 'Larvae'),
                                selected='Male'),
+                 
+                 # instructions
+                 h5('A volcano plot can be generated with ',
+                    tags$b('"log2 fold-change"'),
+                    'on the x-axis and ',
+                    tags$b('"p-adjusted"'), 
+                    'on the y-axis.'),
+                 
+                 # selecting axes for volcano plot
+                 selectInput('de_x_axis', 
+                              'Choose the column for the x-axis',
+                              choices=c('baseMean', 'log2FoldChange', 'lfcSE', 'stat', 'pvalue', 'padj'),
+                              selected='log2FoldChange'),
+                 
+                 selectInput('de_y_axis', 
+                              'Choose the column for the y-axis',
+                              choices=c('baseMean', 'log2FoldChange', 'lfcSE', 'stat', 'pvalue', 'padj'),
+                              selected='padj'),
+                 
+                 # color inputs
+                 colourInput("de_base", 'base point color', "black"),
+                 colourInput("de_highlight", 'highlight point color', "lightblue"),
+                 
+                 # slider
+                 sliderInput('de_slider', 
+                             'Select the magnitude of the p adjusted cutoff:', 
+                             min=-80, max=0, value=-40),
+                 
+                 # instructions
+                 h5('Choose which datasets to compare in a venn diagram:'),
+                 
+                 # checkboxes for venn
+                 checkboxGroupInput('de_venn_choice',
+                                    'Select a combination of datasets:',
+                                    choices=c('Male', 'Female', 'Larvae'),
+                                    selected=c('Male', 'Female', 'Larvae')),
                  
                  # plot button
                  actionButton('de_button', 'Plot', icon= icon('chart-line'), width='100%')
@@ -197,7 +232,7 @@ server <- function(input, output) {
     
     # turn gene_ids into rownames
     rownames(counts) <- counts$gene_id
-    counts = subset(counts, select = -c(gene_id))
+    counts <- subset(counts, select = -c(gene_id))
     
     return(counts)
   })
@@ -211,9 +246,44 @@ server <- function(input, output) {
     } else if (input$de_choice == 'Larvae'){
       id <- 'l'
     }
-    
+  
+    # get the user-selected DESeq2 results and change to proper format
     deseq_res <- readRDS(paste('objects/deseq_', id, '_fluctvsctrl', sep=""))
+    deseq_df <- as.data.frame(deseq_res)
     
+    return(deseq_df)
+    
+  })
+  
+  ### LOADING THE VENN DIAGRAM DE DATA ###
+  load_de_venn_data <- reactive({
+    
+    data <- list('deseq_results')
+    
+    # collect all the necessary datasets
+    for(choice in input$de_venn_choice) { 
+      if (choice == 'Male'){
+        id <- 'm'
+      } else if (choice == 'Female'){
+        id <- 'f'
+      } else if (choice == 'Larvae'){
+        id <- 'l'
+      }
+      
+      # get the user-selected DESeq2 results and change to proper format
+      deseq_res <- readRDS(paste('objects/deseq_', id, '_fluctvsctrl', sep=""))
+      
+      # add to list
+      data <- append(data, deseq_res)
+    }
+    
+    # isolate the deseq results and give list names 
+    data_final <- data[2:length(data)]
+    names(data_final) <- input$de_venn_choice
+    
+      
+      # return list of deseq results
+      return(data_final)
   })
     
     ### MAKING SAMPLE SUMMARY TABLE ###
@@ -369,14 +439,72 @@ server <- function(input, output) {
       # take a dependency on the plot button
       input$de_button
       
+      isolate({
       # load in data given selected dataset
+      # need to isolate b/c radio button used in load_de_data()
       de <- load_de_data()
       
+      # reformat some of the larger decimals
+      de$pvalue <- formatC(de$pvalue, digits=6) 
+      de$padj <- formatC(de$padj, digits=6) 
+      
+      # make genes a column so they are sortable
+      Gene <- rownames(de)
+      de <- cbind(Gene, data.frame(de, row.names=NULL))
+      })
+      
       # make data table
-      DT::datatable(de)
+      DT::datatable(de, options=list(scrollX=TRUE))
       
     })
     
+    ### MAKING DE VOLCANO PLOT ###
+    output$de_volcano <- renderPlot({
+      # make sure no error pops up before data uploaded
+      req(input$counts_data)
+      req(input$sample_data)
+      
+      # take dependency on input$plotbutton
+      input$de_button
+      
+      isolate({
+        data <- load_de_data()
+        
+        volcano(data, 
+                input$de_x_axis, 
+                input$de_y_axis, 
+                input$de_slider,
+                input$de_base,
+                input$de_highlight)
+      })
+      
+    }, height=750)
+    
+    ### MAKING DE VENN DIAGRAM ###
+    output$de_venn <- renderPlot({
+      # make sure no error pops up before data uploaded
+      req(input$counts_data)
+      req(input$sample_data)
+      
+      # take dependency on input$plotbutton
+      input$de_button
+      
+      isolate({
+        
+      data <- load_de_venn_data()
+      
+      # warn user instead of having error message pop up
+      validate(need(length(data) >= 2, "Must select at least 2 datasets for venn diagram."))
+      
+      # get the de gene names (padj < 0.01)
+      gene_names <- lapply(data, de_genes)
+
+      ggVennDiagram(x=gene_names) +
+        ggtitle('Differentially Expressed Transcripts fluctuating vs. control') +
+        scale_x_continuous(expand = expansion(mult = .2))
+      
+      })
+    })
     
     
 }
