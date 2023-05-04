@@ -4,7 +4,7 @@
 ## Analysis
 
 libs <- c("gplots", "GEOquery", "tidyverse", "RColorBrewer", "ggVennDiagram", "BiocManager",
-          "DESeq2")
+          "DESeq2", "DEGreport")
 
 for (package in libs) {
   suppressPackageStartupMessages(require(package, 
@@ -12,6 +12,10 @@ for (package in libs) {
                                          character.only = T))
   require(package, character.only = T)
 }
+
+if (!requireNamespace("BiocManager", quietly=TRUE))
+  install.packages("BiocManager")
+BiocManager::install("DEGreport")
 
 ################################# 
 ######## SET UP THE DATA ######## 
@@ -377,10 +381,10 @@ run_deseq <- function(count_dataframe, coldata, count_filter, condition_name) {
   return(results)
 }
 
-# get genes that are significant(padj < 0.01)
-de_genes <- function(deseq_results){
+# get genes that are significant(padj < padj_cutoff)
+de_genes <- function(deseq_results, padj_cutoff){
   deseq_results <- deseq_results[!is.na(deseq_results$padj),]
-  de_genes <- row.names(deseq_results[deseq_results$padj < 0.01,])
+  de_genes <- row.names(deseq_results[deseq_results$padj < 1 * 10^padj_cutoff,])
   return(de_genes)
 }
 

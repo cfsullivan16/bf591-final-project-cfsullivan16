@@ -34,7 +34,7 @@ ui <- fluidPage(
                  # file input
                  fileInput('sample_data', 'Load sample info', accept=c('.csv')),
                  h5(tags$b('Select a sample variable to group by and a sample variable 
-                    to count by in the visualizations tab.')),
+                    to count by in the visualize tab.')),
                  # radio buttons
                  radioButtons('group', 
                              'Choose a category to group by',
@@ -46,7 +46,8 @@ ui <- fluidPage(
                               choices=c('Lifestage', 'Sex', 'Timepoint', 'Treatment'),
                               selected='Timepoint'),
                  # plot button
-                 actionButton('sample_button', 'Plot', icon= icon('chart-line'), width='100%')
+                 actionButton('sample_button', 'Plot', icon= icon('chart-line'), width='100%'),
+                 width=3
                  ),
                
                # MAIN PANEL: GRAPH TABS
@@ -105,7 +106,8 @@ ui <- fluidPage(
                  ),
                  
                  # plot button
-                 actionButton('counts_button', 'Plot', icon= icon('chart-line'), width='100%')
+                 actionButton('counts_button', 'Plot', icon= icon('chart-line'), width='100%'),
+                 width=3
                ),
                
                # MAIN PANEL: GRAPH TABS
@@ -129,50 +131,23 @@ ui <- fluidPage(
              sidebarLayout(
                # SIDEBAR: DE DATA
                sidebarPanel(
+                 # instructions
+                 h5(tags$b('Choose which dataset you would like to analyze:')),
+                 
                  # buttons to choose dataset
                  radioButtons('de_choice', 
-                             'Choose whether to view DESeq2 results for male, female, or larvae datasets:',
+                             'Select DESeq2 results for male, female, or larvae datasets:',
                                choices=c('Male', 'Female', 'Larvae'),
                                selected='Male'),
                  
-                 # instructions
-                 h5('A volcano plot can be generated with ',
-                    tags$b('"log2 fold-change"'),
-                    'on the x-axis and ',
-                    tags$b('"p-adjusted"'), 
-                    'on the y-axis.'),
-                 
-                 # selecting axes for volcano plot
-                 selectInput('de_x_axis', 
-                              'Choose the column for the x-axis',
-                              choices=c('baseMean', 'log2FoldChange', 'lfcSE', 'stat', 'pvalue', 'padj'),
-                              selected='log2FoldChange'),
-                 
-                 selectInput('de_y_axis', 
-                              'Choose the column for the y-axis',
-                              choices=c('baseMean', 'log2FoldChange', 'lfcSE', 'stat', 'pvalue', 'padj'),
-                              selected='padj'),
-                 
-                 # color inputs
-                 colourInput("de_base", 'base point color', "black"),
-                 colourInput("de_highlight", 'highlight point color', "lightblue"),
-                 
                  # slider
                  sliderInput('de_slider', 
-                             'Select the magnitude of the p adjusted cutoff:', 
-                             min=-80, max=0, value=-40),
-                 
-                 # instructions
-                 h5('Choose which datasets to compare in a venn diagram:'),
-                 
-                 # checkboxes for venn
-                 checkboxGroupInput('de_venn_choice',
-                                    'Select a combination of datasets:',
-                                    choices=c('Male', 'Female', 'Larvae'),
-                                    selected=c('Male', 'Female', 'Larvae')),
+                             'Select the magnitude of the p adjusted cutoff for each of the following analyses:', 
+                             min=-80, max=0, value=-2),
                  
                  # plot button
-                 actionButton('de_button', 'Plot', icon= icon('chart-line'), width='100%')
+                 actionButton('de_button', 'Plot', icon= icon('chart-line'), width='100%'),
+                 width=3              
                ),
                
                # MAIN PANEL: DE TABS
@@ -181,10 +156,61 @@ ui <- fluidPage(
                  tabsetPanel(
                    tabPanel("DE Results",
                             DT::dataTableOutput("de_results", width="100%")),
+               
                    tabPanel("Vocano plot",
-                            withSpinner(plotOutput("de_volcano"))),
+                            # sidebar within volcano plot area for volcano plot-specific input
+                            sidebarLayout(
+                              sidebarPanel(
+                                # instructions
+                                h5('A volcano plot can be generated with ',
+                                   tags$b('log2 fold-change'),
+                                   'on the x-axis and ',
+                                   tags$b('p-adjusted'), 
+                                   'on the y-axis.'),
+                                
+                                # selecting axes for volcano plot
+                                selectInput('de_x_axis', 
+                                            'Choose the column for the x-axis',
+                                            choices=c('baseMean', 'log2FoldChange', 'lfcSE', 'stat', 'pvalue', 'padj'),
+                                            selected='log2FoldChange'),
+                                
+                                selectInput('de_y_axis', 
+                                            'Choose the column for the y-axis',
+                                            choices=c('baseMean', 'log2FoldChange', 'lfcSE', 'stat', 'pvalue', 'padj'),
+                                            selected='padj'),
+                                
+                                # color inputs
+                                colourInput("de_base", 'base point color', "black"),
+                                colourInput("de_highlight", 'highlight point color', "lightblue")
+                                
+                              ),
+                            
+                    mainPanel(
+                            withSpinner(plotOutput("de_volcano"))
+                            )
+                        )
+                    ),
+                    
                    tabPanel("Venn diagrams",
-                            withSpinner(plotOutput("de_venn"))),
+                            # sidebar with venn diagram-specific options
+                            sidebarLayout(
+                              sidebarPanel(
+                                
+                                # instructions
+                                h5('A venn diagram can be generated to find ',tags$b('overlapping significant genes'),
+                                   'at the selected p-adjusted threshold.'),
+                                
+                                # checkboxes for venn
+                                checkboxGroupInput('de_venn_choice',
+                                                   'Select a combination of datasets:',
+                                                   choices=c('Male', 'Female', 'Larvae'),
+                                                   selected=c('Male', 'Female', 'Larvae'))
+                                
+                              ),
+                              mainPanel(
+                            withSpinner(plotOutput("de_venn")))
+                              )
+                   )
                  )
                ))
     ),
@@ -444,17 +470,20 @@ server <- function(input, output) {
       # need to isolate b/c radio button used in load_de_data()
       de <- load_de_data()
       
+      de_filtered <- de %>%
+        dplyr::filter(padj < 1 * 10^input$de_slider)
+      
       # reformat some of the larger decimals
-      de$pvalue <- formatC(de$pvalue, digits=6) 
-      de$padj <- formatC(de$padj, digits=6) 
+      de_filtered$pvalue <- formatC(de_filtered$pvalue, digits=6) 
+      de_filtered$padj <- formatC(de_filtered$padj, digits=6) 
       
       # make genes a column so they are sortable
-      Gene <- rownames(de)
-      de <- cbind(Gene, data.frame(de, row.names=NULL))
+      Gene <- rownames(de_filtered)
+      de_filtered <- cbind(Gene, data.frame(de_filtered, row.names=NULL))
       })
       
       # make data table
-      DT::datatable(de, options=list(scrollX=TRUE))
+      DT::datatable(de_filtered, options=list(scrollX=TRUE))
       
     })
     
@@ -478,7 +507,7 @@ server <- function(input, output) {
                 input$de_highlight)
       })
       
-    }, height=750)
+    }, height=500)
     
     ### MAKING DE VENN DIAGRAM ###
     output$de_venn <- renderPlot({
@@ -486,7 +515,7 @@ server <- function(input, output) {
       req(input$counts_data)
       req(input$sample_data)
       
-      # take dependency on input$plotbutton
+      # take dependency on de diagram button
       input$de_button
       
       isolate({
@@ -496,12 +525,13 @@ server <- function(input, output) {
       # warn user instead of having error message pop up
       validate(need(length(data) >= 2, "Must select at least 2 datasets for venn diagram."))
       
-      # get the de gene names (padj < 0.01)
-      gene_names <- lapply(data, de_genes)
+      # get the de gene names (padj selected)
+      gene_names <- lapply(data, de_genes, padj_cutoff=input$de_slider)
 
       ggVennDiagram(x=gene_names) +
         ggtitle('Differentially Expressed Transcripts fluctuating vs. control') +
-        scale_x_continuous(expand = expansion(mult = .2))
+        scale_x_continuous(expand = expansion(mult = .2)) +
+        theme(plot.title = element_text(face = "bold"))
       
       })
     })
