@@ -34,7 +34,7 @@ female_counts = counts[2][[1]]
 larvae_counts = counts[3][[1]]
 all_counts = counts[4][[1]]
 
-head(all_counts)
+head(counts['All'])
 
 ```
 ```{r test filters}
@@ -57,7 +57,7 @@ scatter2
 ```
 
 ```{r heatmap}
-counts_heatmap <- plot_heatmap(all_counts, meta, 0.8, 10)
+counts_heatmap <- plot_heatmap(all_counts, meta, 0.9, 20)
 print(counts_heatmap)
 
 ```
@@ -69,14 +69,23 @@ print(pca_biplot)
 ```
 
 ```{r DESeq2}
-deseq_results_male <- run_deseq(male_counts, get_col_data(male_counts, meta), 
+deseq_results_male <- run_deseq(male_counts, get_col_data(male_counts, meta, 'Male'), 
                                 10, "condition_fluctuating_vs_control")
 
-deseq_results_female <- run_deseq(female_counts, get_col_data(female_counts, meta),
+deseq_results_female <- run_deseq(female_counts, get_col_data(female_counts, meta, 'Female'),
                                   10, "condition_fluctuating_vs_control")
 
-deseq_results_larvae <- run_deseq(larvae_counts, get_col_data(larvae_counts, meta), 
+deseq_results_larvae <- run_deseq(larvae_counts, get_col_data(larvae_counts, meta, 'Larvae'), 
                                  10, "condition_fluctuating_vs_control")
+
+```
+
+```{r load DESeq2 res}
+deseq_results_male <- readRDS('objects/deseq_m_fluctvsctrl')
+
+deseq_results_female <- readRDS('objects/deseq_f_fluctvsctrl')
+
+deseq_results_larvae <- readRDS('objects/deseq_l_fluctvsctrl')
 
 ```
 
@@ -86,9 +95,9 @@ head(deseq_results_larvae)
 
 ```{r DESeq2 comparison}
 
-gene_names <- list(Male = de_genes(deseq_results_male), 
-                   Female = de_genes(deseq_results_female), 
-                   Larvae = de_genes(deseq_results_larvae))
+gene_names <- list(Male = de_genes(deseq_results_male, -2), 
+                   Female = de_genes(deseq_results_female, -2), 
+                   Larvae = de_genes(deseq_results_larvae, -2))
 
 ggVennDiagram(x=gene_names) +
   ggtitle('Differentially Expressed Transcripts fluctuating vs. control') +
@@ -107,3 +116,35 @@ volc_plot <- volcano(as.data.frame(readRDS('objects/deseq_f_fluctvsctrl')),
 print(volc_plot)
 
 ```
+
+```{r clustering method 1}
+clustering_female <- clustering('Female', female_counts, meta, deseq_results_female, -5, 40)
+                     
+```
+``` {r cluster plot}
+
+cluster_full_plot(clustering_female, "Female")
+
+```
+```{r timecourse heatmap}
+
+female_timecourse <- timecourse_heatmap(clustering_female, female_counts, "Female")
+   
+```
+```{r plotting counts data for indivdual genes}
+
+cluster_gene_plot2(clustering_female, 
+                   "Female", 
+                   get_col_data(female_counts, meta, "Female"),
+                   'FBgn0003068')
+
+```
+
+```{r clustering method 2}
+clustering_malev2 <- clustering_masigpro(male_counts, 
+                                         get_col_data(male_counts, meta, "Male"), 
+                                         2, 9)
+                     
+
+```
+

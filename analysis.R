@@ -4,7 +4,7 @@
 ## Analysis
 
 libs <- c("gplots", "GEOquery", "tidyverse", "RColorBrewer", "ggVennDiagram", "BiocManager",
-          "DESeq2", "DEGreport")
+          "DESeq2", "DEGreport", "maSigPro")
 
 for (package in libs) {
   suppressPackageStartupMessages(require(package, 
@@ -13,9 +13,34 @@ for (package in libs) {
   require(package, character.only = T)
 }
 
-if (!requireNamespace("BiocManager", quietly=TRUE))
-  install.packages("BiocManager")
-BiocManager::install("DEGreport")
+################################# 
+######## HELPER FUNCTIONS ####### 
+################################# 
+
+# CPM normalization
+get_library_size <- function(count_data) {
+  # transpose the tibble
+  count_data_T <- count_data %>%
+    pivot_longer(cols = -gene, names_to = 'sample') %>%
+    pivot_wider(names_from = gene, values_from = value)
+  # make new col with total counts
+  count_data_T <- count_data_T %>%
+    dplyr::mutate(library_size=rowSums(count_data_T[-1]))
+  # return cols of interest
+  return(dplyr::select(count_data_T, c(sample, library_size)))
+}
+
+normalize_by_cpm <- function(count_data) {
+  # first get lib sizes and pivot
+  lib_size <- get_library_size(count_data) %>% 
+    pivot_wider(names_from=sample, values_from=library_size)
+  
+  # now use to normalize
+  count_data_norm <- count_data
+  count_data_norm[-1] <- mapply(function(x, y) x/y*1e6, x=count_data[-1], y=lib_size)
+  
+  return(count_data_norm)
+}
 
 ################################# 
 ######## SET UP THE DATA ######## 
@@ -130,8 +155,9 @@ get_data <- function(meta) {
   
   # put all counts back together, excluding male outlier
   # all_counts <- cbind(male_counts, female_counts, larvae_counts)
-  
-  return(list(male_counts, female_counts, larvae_counts, counts))
+  results <- list(male_counts, female_counts, larvae_counts, counts)
+  names(results) <- c('Male', 'Female', 'Larvae', 'All')
+  return(results)
 }
 
 filter_counts <- function(counts_data, slider_var, slider_nonzero){
@@ -278,25 +304,38 @@ plot_heatmap <- function(counts_data, meta, slider_var, slider_nonzero){
   # log scale the counts
   counts_log_scale <- log2(counts_filtered + 1)
   
-  # get rowsidecolors
+  # get colsidecolors
   meta <- meta %>%
     # dplyr::filter(title != 'CAL2M') %>% # remove outlier
     dplyr::mutate('color_bar' = case_when((Sex.ch1 == 'female') ~ 'orange',
                                           (Sex.ch1 == 'male') ~ 'purple',
                                           (Sex.ch1 == 'unknown') ~ 'gray'))
   
+  # Add extra space to right of plot area; change clipping to figure
+  par(mar=c(5.1, 4.2, 4.1, 8.4), xpd=TRUE)
   
-  return(gplots::heatmap.2(as.matrix(counts_log_scale), 
+  gplots::heatmap.2(as.matrix(counts_log_scale), 
                            scale="row",
                            labCol=FALSE,
                            labRow=FALSE,
                            key=TRUE,
                            trace="none",
                            ColSideColors=meta$color_bar,
-                           col=brewer.pal(11, "RdYlBu")))
+                           col=brewer.pal(11, "RdYlBu"))
+  
+  legend("topright", inset=c(-0.3,-0.3), title = "Sample Group",
+         legend=c("Male","Female", "Larvae"), 
+         fill=c("purple","orange", "gray"), cex=0.8, box.lty=0)
 }
 
 plot_pca <- function(counts_data, meta, dim1, dim2){
+  
+  # get normalized version of counts matrix
+  counts_data <- normalize_by_cpm(as_tibble(counts_data, rownames='gene'))
+  counts_data <-as.data.frame(counts_data)
+  rownames(counts_data) <- counts_data$gene
+  counts_data <- subset(counts_data, select = -c(gene))
+  
   # log scale the data
   counts_data <- log10(counts_data + 1)
 
@@ -339,7 +378,7 @@ plot_pca <- function(counts_data, meta, dim1, dim2){
 ########################
 
 # get the col_data to input into the DESeq2 analysis
-get_col_data <- function(counts, md) {
+get_col_data <- function(counts, md, dataset) {
   # input column name data from the counts df and experiment type
   col_data <- data.frame(samplename = colnames(counts))
   
@@ -358,13 +397,23 @@ get_col_data <- function(counts, md) {
   col_data$timepoint <- as.factor(col_data$timepoint)
   col_data$condition <- as.factor(col_data$condition)
   
+  # define the order of the timepoints
+  if (dataset == 'Larvae'){
+    category_order <- c('high1', 'low1')
+    
+  } else {
+    category_order <- c('high2', 'low2', 'high3', 'low3')
+  }
+  
+  col_data <- col_data %>% arrange(factor(timepoint, levels = category_order))
+  
   return(col_data[c('condition', 'timepoint')])
 }
 
 # run DESeq2
 run_deseq <- function(count_dataframe, coldata, count_filter, condition_name) {
   # make deseqdataset object
-  dds <- DESeqDataSetFromMatrix(countData = as.matrix(count_dataframe),
+  dds <- DESeqDataSetFromMatrix(countData = as.matrix(count_dataframe[,rownames(coldata)]),
                                 colData = coldata,
                                 design = ~ timepoint + condition + timepoint:condition)
   
@@ -411,4 +460,292 @@ volcano <- function(dataf, x_name, y_name, slider, color1, color2){
   
   return(volc)
 }
+
+########################
+###### CLUSTERING ######
+########################
+
+# perform clustering analysis on counts data using degpatterns
+clustering <- function(dataset, counts, meta, deseq_results, padj_cutoff, minc){
+  # get col data
+  col_data <- get_col_data(counts, meta, dataset)
   
+  # get the significant genes from the LRT deseq results at the indicated p value
+  sigLRT_genes <- de_genes(deseq_results, padj_cutoff)
+  
+  # need to get rlog version of counts matrix
+  rlog_mat <- DESeq2::vst(as.matrix(counts))
+  
+  # get the rlog counts value for the significant genes
+  cluster_rlog <- rlog_mat[rownames(rlog_mat) %in% sigLRT_genes, ]
+  
+  # re-order the columns for graphing
+  cluster_rlog <- cluster_rlog[,rownames(col_data)]
+  
+  # get clusters
+  clusters <- degPatterns(cluster_rlog, 
+                          metadata = col_data, 
+                          time = "timepoint", 
+                          col="condition",
+                          minc=minc)
+  
+  return(clusters)
+}
+
+# make plots for each of the clusters tracking gene expression over time
+cluster_full_plot <- function(clusters, dataset){
+  # set degree and level according to dataset
+  if (dataset == "Larvae"){
+    degree <- 1
+    level <- c('high1', 'low1')
+  } else {
+    degree <- 3
+    level <- c('high2', 'low2', 'high3', 'low3')
+  }
+  
+  
+  # get the plotting data
+  plot_data <- clusters$plot$data
+  
+  plot <- plot_data %>%
+    ggplot(mapping = aes(x=factor(timepoint,level=level), 
+                         y=value, 
+                         color=condition,
+                         fill=condition)) +
+    
+    geom_boxplot(outlier.alpha = NULL, alpha=0.3, outlier.size=0.9) +
+    
+    geom_point(na.rm=FALSE, position=position_jitterdodge(), alpha=0.3, size=0.9) +
+    
+    geom_smooth(mapping=(aes(x=factor(timepoint,level=level), 
+                             y=value, 
+                             color=condition,
+                             group=condition)),
+                method = lm, formula = y ~ poly(x, degree),
+                se = FALSE,
+                alpha=0.5) +
+    
+    geom_line(mapping=aes(group=line_group), alpha=0.1) +
+    
+    labs(x="",
+         y='Z-score of gene abundance') +
+
+    theme_bw() +
+    scale_colour_brewer(palette="Set1")
+    
+  
+  return(plot + facet_wrap('~title'))
+}
+
+# get the relavent data for download
+get_summary_data <- function(clusters){
+  # get the summary data
+  summary <- clusters$normalized
+  
+  # keep relevant columns
+  keep <- c('genes', 'merge', 'value', 'condition', 'timepoint', 'cluster')
+  summary <- summary[,keep]
+  
+  return(summary)
+  
+}
+
+# make the timecourse heatmap
+timecourse_heatmap <- function(clusters, counts, dataset){
+  
+  # get metadata and z score gene abundance values
+  md <- clusters$normalized[,c('genes', 'merge', 'value', 'condition', 'timepoint', 'cluster')]
+  plot_data <- md[,c('genes','merge', 'value')]
+  plot_data <- plot_data %>% pivot_wider(names_from='merge', values_from='value')
+
+  # make genes rownames
+  plot_data <- as.data.frame(plot_data)
+  rownames(plot_data) <- plot_data$genes
+  plot_data <- subset(plot_data, select=-c(genes))
+
+  # re-order the columns for graphing and get colsidecolors
+  if (dataset == 'Larvae'){
+    order <- c('controlhigh1', 'controllow1', 
+               'fluctuatinghigh1', 'fluctuatinglow1')
+    col_colors <- rep(c('green','red'),each=2)
+    
+  }else{
+    order <- c('controlhigh2', 'controllow2', 'controlhigh3', 
+               'controllow3','fluctuatinghigh2', 'fluctuatinglow2', 
+               'fluctuatinghigh3', 'fluctuatinglow3')
+    col_colors <- rep(c('green','red'),each=4)
+  }
+  
+  # get row order
+  row_order_df <- arrange(clusters$df, cluster)
+  
+  # get rows and columns in order
+  plot_data <- plot_data[,order]
+  plot_data <- plot_data[row_order_df$genes,]
+  
+  # get row colors
+  coul <- brewer.pal(12, "Paired") 
+  coul <- colorRampPalette(coul)(max(row_order_df$cluster))
+  # randomize
+  coul <- sample(coul)
+  row_order_df$colors <- coul[row_order_df$cluster]
+  
+  # Add extra space to right of plot area; change clipping to figure
+  par(mar=c(5.1, 4.2, 4.1, 8.4), xpd=TRUE)
+  
+  # have timepoints show up on heatmap
+  colnames(plot_data) <- order
+  
+  gplots::heatmap.2(as.matrix(plot_data), 
+                    Colv=NULL,
+                    Rowv=NULL,
+                    dendrogram="none",
+                    labRow=FALSE,
+                    key=TRUE,
+                    trace="none",
+                    ColSideColors=col_colors,
+                    RowSideColors=row_order_df$colors,
+                    srtCol=28,
+                    col=brewer.pal(11, "RdYlBu"))
+  
+  legend("topright", inset=c(-0.3,-0.3), title = "Condition",
+         legend=c("control","fluctuating"), 
+         fill=c("green","red"), cex=0.8, box.lty=0)
+  
+}
+
+# show z-score gene abundance for individual gene of interest
+# make plots for each of the clusters tracking gene expression over time
+cluster_gene_plot <- function(clusters, dataset, gene_name){
+  # set degree and level according to dataset
+  if (dataset == "Larvae"){
+    level <- c('high1', 'low1')
+  } else {
+    level <- c('high2', 'low2', 'high3', 'low3')
+  }
+  
+  
+  # get the plotting data and subset for the specific gene of interest
+  plot_data <- clusters$plot$data
+  plot_data <- plot_data %>%
+    dplyr::filter(genes==gene_name)
+  
+  plot <- plot_data %>%
+    ggplot(mapping = aes(x=factor(timepoint,level=level), 
+                         y=value, 
+                         color=condition,
+                         fill=condition)) +
+    
+    geom_point(na.rm=FALSE, alpha=0.7, size=0.9) +
+    
+    geom_line(mapping=aes(group=condition), alpha=0.7) +
+    
+    labs(x="",
+         y='Z-score of gene abundance',
+         title=paste('Expression Over Time for', gene_name)) +
+    
+    theme_bw() +
+    scale_colour_brewer(palette="Set1")
+  
+  
+  return(plot)
+}
+
+
+# alt version
+cluster_gene_plot2 <- function(clusters, dataset, col_dat, gene_name){
+  # set degree and level according to dataset
+  if (dataset == "Larvae"){
+    level <- c('high1', 'low1')
+  } else {
+    level <- c('high2', 'low2', 'high3', 'low3')
+  }
+  
+  
+  # get the plotting data and subset for the specific gene of interest
+  plot_data <- clusters$counts
+  plot_data <- plot_data[gene_name,]
+  
+  # add the metadata
+  plot_data <- cbind(plot_data, col_dat)
+  colnames(plot_data) <- c('value', 'condition', 'timepoint')
+  plot_data$line_group <- paste(pd$condition, pd$timepoint, sep="_")
+  
+  plot <- plot_data %>%
+    ggplot(mapping = aes(x=factor(timepoint,level=level), 
+                         y=value, 
+                         color=condition,
+                         fill=condition)) +
+    
+    geom_boxplot(outlier.alpha = NULL, alpha=0.5, outlier.size=0.9) +
+    
+    geom_point(na.rm=FALSE, position=position_jitterdodge(), alpha=0.5, size=0.9) +
+    
+    geom_line(mapping=aes(group=condition), alpha=0.7) +
+    
+    labs(x="",
+         y='Z-score of gene abundance',
+         title=paste('Expression Over Time for', gene_name)) +
+    
+    theme_bw() +
+    scale_colour_brewer(palette="Set1")
+  
+  
+  return(plot)
+}
+
+# ALTERNATIVE OPTION: MASIGPRO
+# get the right design format to run masigpro by editing coldata
+make_masig_design <- function(col_dat){
+  # make separate columns for timepoints
+  col_dat$Time <- as.numeric(col_dat$timepoint)
+  
+  # separate columns for replicates
+  col_dat <- col_dat %>% dplyr::mutate(reps = paste(condition, timepoint))
+  col_dat$Replicate <- as.numeric(as.factor(col_dat$reps))
+  
+  # separate columns for conditions
+  col_dat <- col_dat %>%
+    dplyr::mutate('Control' = ifelse(condition == 'control', 1, 0), 
+                   'Fluctuating' = ifelse(condition == 'fluctuating', 1, 0))
+
+  return(col_dat[c('Time', 'Replicate', 'Control', 'Fluctuating')])
+  
+}
+  
+# perform clustering analysis on counts data using masigpro as seen in the paper
+clustering_masigpro <- function(counts, coldat, degree, k){
+  
+  # get design data
+  des <- make_masig_design(coldat)
+  
+  # make design
+  design <- make.design.matrix(des, degree = degree)
+  
+  # need to get normalized version of counts matrix
+  counts_norm <- normalize_by_cpm(as_tibble(counts, rownames='gene'))
+  counts_norm <-as.data.frame(counts_norm)
+  rownames(counts_norm) <- counts_norm$gene
+  counts_norm <- subset(counts_norm, select = -c(gene))
+  
+  # get significant genes
+  fit <- p.vector(counts_norm, 
+                  design, 
+                  Q = 0.05, 
+                  MT.adjust = "BH", 
+                  min.obs = 20, 
+                  counts=TRUE)
+  
+  # do stepwise regression
+  tstep <- T.fit(fit, step.method = "backward", alfa = 0.05)
+  
+  # get signficant genes
+  sigs <- get.siggenes(tstep, rsq = 0.6, vars = "groups")
+  
+  par(mar = c(1, 1, 1, 1))
+  
+  see.genes(sigs$sig.genes$FluctuatingvsControl, show.fit = T, dis =design$dis,
+            cluster.method="kmeans", cluster.data = 1, k = k)
+  
+}
+

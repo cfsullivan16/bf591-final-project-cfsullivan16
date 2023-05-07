@@ -216,8 +216,43 @@ ui <- fluidPage(
     ),
     ########## TAB 4: CLUSTERING ########## 
     tabPanel("Clustering",
-             # tableOutput('table'),
+             sidebarLayout(
+               # SIDEBAR: COUNTS DATA INPUT
+               sidebarPanel(
+                 # file input
+                 h5(tags$b('Select a dataset to analyze. Use the sliders to specify a significance threshold.')),
+                 # radio buttons
+                 radioButtons('cluster_dataset', 
+                              'Select a dataset for gene clustering:',
+                              choices=c('Male', 'Female', 'Larvae'),
+                              selected='Male'),
+                 
+                 # sliders
+                 sliderInput('cluster_pval', 
+                             'Select the p-value threshold:', 
+                             min=-80, max=0, value=-2),
+                 
+                 # plot button
+                 actionButton('cluster_button', 'Plot', icon= icon('chart-line'), width='100%'),
+                 width=3
+               ),
+               
+               # MAIN PANEL: GRAPH TABS
+               mainPanel(
+                 headerPanel(""),
+                 tabsetPanel(
+                   tabPanel("Test",
+                            DT::dataTableOutput("cluster_test", width="100%")),
+                   tabPanel("Heatmap?",
+                            withSpinner(plotOutput("cluster_heatmap"))),
+                   tabPanel("Cluster Plots",
+                            withSpinner(plotOutput("cluster_plots"))),
+                   tabPanel("Individual Gene",
+                            withSpinner(plotOutput("cluster_gene")))
+                 )
+               ))
     ),
+
     ########## TAB 5 IF TIME: GSEA ########## 
     tabPanel("GSEA?",
              # tableOutput('table'),
@@ -310,6 +345,43 @@ server <- function(input, output) {
       
       # return list of deseq results
       return(data_final)
+  })
+  
+  ### LOADING THE CLUSTERING DATA ###
+  load_cluster_data <- reactive({
+    # need to have the counts and sample data available
+    req(input$sample_data)
+    req(input$counts_data)
+    
+    # take a dependency on plot button
+    input$cluster_button
+    
+    counts <- load_counts_data()
+    meta <- load_sample_data()
+    
+    # load the selected dataset
+    isolate({
+      if (input$cluster_dataset == 'Male'){
+        # divide samples up to prep for analysis
+        male_titles <- meta[meta$'Sex.ch1' == 'male','title'] 
+        # remove the male outlier
+        male_titles <- male_titles[! male_titles %in% c('CAL2M')]
+        # get individual counts
+        male_counts <- counts[,male_titles]
+        return(male_counts)
+        
+      } else if (input$cluster_dataset == 'Female'){
+        female_titles <- meta[meta$'Sex.ch1' == 'female','title']
+        female_counts <- counts[,female_titles]
+        return(female_counts)
+        
+      } else if (input$cluster_dataset == 'Larvae'){
+        larvae_titles <- meta[meta$'lifestage.ch1' == 'larvae','title']
+        larvae_counts <- counts[,larvae_titles]
+        return(larvae_counts)
+      }
+    })
+    
   })
     
     ### MAKING SAMPLE SUMMARY TABLE ###
@@ -535,6 +607,29 @@ server <- function(input, output) {
       
       })
     })
+    
+    ### TESTING COUNTS DATA LOADED CORRECTLY ###
+    output$cluster_test <- DT::renderDataTable({
+      # make it so input data is required
+      req(input$counts_data)
+      req(input$sample_data)
+      
+      # take a dependency on the plot button
+      input$cluster_button
+      
+      # load in data
+      counts <- load_cluster_data()
+      
+      # make data table
+      DT::datatable(counts,  options=list(scrollX=TRUE, pageLength=5))
+      
+    })
+    
+    ### GET CLUSTERING RESULTS ###
+    output$cluster_plots <- renderPlot({
+      
+    })
+    
     
     
 }
