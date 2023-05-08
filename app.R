@@ -78,11 +78,11 @@ ui <- fluidPage(theme = shinytheme("yeti"),
                  # sliders
                  sliderInput('slider_var', 
                              'Select minimum percentile variance:', 
-                              min=0, max=100, value=20),
+                              min=0, max=100, value=75),
                  
                  sliderInput('slider_nonzero', 
                              'Select minimum non-zero samples:', 
-                              min=0, max=80, value=8),
+                              min=0, max=80, value=20),
                  # slider to aggregate or dis-aggregate
                  #radioButtons('counts_ag', 
                  #            'Choose whether to disaggregate by male, female, larval:',
@@ -99,7 +99,7 @@ ui <- fluidPage(theme = shinytheme("yeti"),
                  headerPanel(""),
                  tabsetPanel(
                    tabPanel("Summary",
-                            tableOutput("counts_summary")),
+                            withSpinner(tableOutput("counts_summary"))),
                    tabPanel("Scatter Plots",
                             withSpinner(plotOutput("counts_scatter1")),
                             withSpinner(plotOutput("counts_scatter2"))),
@@ -223,7 +223,8 @@ ui <- fluidPage(theme = shinytheme("yeti"),
                                 
                                 # instructions
                                 h5('A venn diagram can be generated to find ',tags$b('overlapping significant genes'),
-                                   'at the selected p-adjusted threshold.'),
+                                   'at the selected p-adjusted threshold. Note: adjusted p-values from LRT
+                                   test are used.'),
                                 
                                 # checkboxes for venn
                                 checkboxGroupInput('de_venn_choice',
@@ -300,7 +301,7 @@ ui <- fluidPage(theme = shinytheme("yeti"),
     ),
 
     ########## TAB 5 - UNDER DEVELOPMENT: GSEA ########## 
-    #tabPanel("GSEA?",
+    #tabPanel("GSEA",
     #         # tableOutput('table'),
     #)
   )
@@ -585,11 +586,17 @@ server <- function(input, output) {
       # load the data
       counts <- load_counts_data()
       
+      # CPM normalize
+      counts <- normalize_by_cpm(as_tibble(counts, rownames='gene'))
+      counts <-as.data.frame(counts)
+      rownames(counts) <- counts$gene
+      counts <- subset(counts, select = -c(gene))
+      
       # make the table
       isolate({
       return(filter_counts(counts, input$slider_var/100, input$slider_nonzero))
       })
-    }, caption="Summary for Genes Passing Filtering Conditions",
+    }, caption="Summary of Genes Passing Filtering Conditions after CPM Normalization",
        height=500) 
     
     ### MAKING COUNTS SCATTER PLOTS ###
@@ -654,6 +661,7 @@ server <- function(input, output) {
       req(input$sample_data)
       req(input$counts_data)
       
+      # button for pca-specific functions
       input$pca_button
       
       counts <- load_counts_data()

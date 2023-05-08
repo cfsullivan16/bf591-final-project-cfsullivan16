@@ -235,6 +235,12 @@ scatter_plot1 <- function(counts_data, slider_var, slider_nonzero){
   # genes filtered out are lighter
   # scatter_plot1: median count vs variance (consider log scale for plot)
   # scatter_plot2: median count vs number of zeros
+  
+  # normalize data with CPM method
+  counts_data <- normalize_by_cpm(as_tibble(counts_data, rownames='gene'))
+  counts_data <-as.data.frame(counts_data)
+  rownames(counts_data) <- counts_data$gene
+  counts_data <- subset(counts_data, select = -c(gene))
   counts_data <- prep_scatter_data(counts_data)
   
   # find the percentile cut-off for variance
@@ -264,6 +270,12 @@ scatter_plot2 <- function(counts_data, slider_var, slider_nonzero){
   # genes filtered out are lighter
   # scatter_plot1: median count vs variance (consider log scale for plot)
   # scatter_plot2: median count vs number of zeros
+  
+  # normalize by CPM and prep data
+  counts_data <- normalize_by_cpm(as_tibble(counts_data, rownames='gene'))
+  counts_data <-as.data.frame(counts_data)
+  rownames(counts_data) <- counts_data$gene
+  counts_data <- subset(counts_data, select = -c(gene))
   counts_data <- prep_scatter_data(counts_data)
   
   # find the percentile cut-off for variance
@@ -279,7 +291,7 @@ scatter_plot2 <- function(counts_data, slider_var, slider_nonzero){
     geom_point(size=1.5) +
     theme_bw(base_size = 16) +
     scale_color_manual(values = c('FALSE' = "lightblue", 'TRUE' = "darkblue")) +
-    ggtitle('Relationship Between Variance and Number of Zero Samples') +
+    ggtitle('Relationship Between Number of Zero Samples and Median Count') +
     labs(color='Passes Filtering Conditions',
          x=expression("log"[10]*"Median Count"),
          y="Number of Zero Samples")
@@ -289,6 +301,13 @@ scatter_plot2 <- function(counts_data, slider_var, slider_nonzero){
 }
 
 plot_heatmap <- function(counts_data, meta, slider_var, slider_nonzero){
+  
+  # normalize counts data
+  counts_data <- normalize_by_cpm(as_tibble(counts_data, rownames='gene'))
+  counts_data <-as.data.frame(counts_data)
+  rownames(counts_data) <- counts_data$gene
+  counts_data <- subset(counts_data, select = -c(gene))
+  
   # get information we need to filter out genes
   counts_data <- prep_scatter_data(counts_data)
   
@@ -314,6 +333,9 @@ plot_heatmap <- function(counts_data, meta, slider_var, slider_nonzero){
   # Add extra space to right of plot area; change clipping to figure
   par(mar=c(5, 4, 2, 6))
   
+  # custom colors
+  coul <- colorRampPalette(brewer.pal(11, "RdYlBu"))(25)
+  
   gplots::heatmap.2(as.matrix(counts_log_scale), 
                     scale="row",
                     labCol=FALSE,
@@ -321,7 +343,7 @@ plot_heatmap <- function(counts_data, meta, slider_var, slider_nonzero){
                     key=TRUE,
                     trace="none",
                     ColSideColors=meta$color_bar,
-                    col=brewer.pal(11, "RdYlBu"),
+                    col=coul,
                     main='Log2-Scaled Counts')
   
   legend("bottomright", title = "Sample Group",
@@ -342,7 +364,7 @@ plot_pca <- function(counts_data, meta, dim1, dim2, color, shape){
   counts_data <- subset(counts_data, select = -c(gene))
   
   # log scale the data
-  counts_data <- log10(counts_data + 1)
+  counts_data <- log10(counts_data + 0.5)
 
   # perform PCA
   pca_results <- prcomp(t(counts_data), center=TRUE, scale=FALSE)
