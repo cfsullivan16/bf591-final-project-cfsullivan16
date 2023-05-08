@@ -480,7 +480,7 @@ volcano <- function(dataf, x_name, y_name, slider, color1, color2){
   
   volc <- dataf_filtered %>%
     ggplot(mapping=aes(x=!!sym(x_name), y=-log10(!!sym(y_name)), color=color)) +
-    geom_point(size=1.5) +
+    geom_point(size=1) +
     theme_bw() + 
     scale_color_manual(values = c('FALSE' = color1, 'TRUE' = color2)) +
     labs(color=paste(y_name, '< 1e', slider),

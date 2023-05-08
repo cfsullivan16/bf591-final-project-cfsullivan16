@@ -336,16 +336,16 @@ server <- function(input, output) {
   output$cluster_pval_suggest <- renderUI({
     if(input$cluster_dataset == 'Larvae'){
       elem <- sliderInput('cluster_pval', 
-                          'Select the p-value threshold:', 
+                          'Select the adjusted p-value threshold:', 
                           min=-55, max=0, value=-2)
       
     } else if(input$cluster_dataset == 'Male'){
       elem <- sliderInput('cluster_pval', 
-                          'Select the p-value threshold:', 
+                          'Select the adjusted p-value threshold:', 
                           min=-130, max=0, value=-5)
     } else if (input$cluster_dataset == 'Female'){
       elem <- sliderInput('cluster_pval', 
-                  'Select the p-value threshold:', 
+                  'Select the adjusted p-value threshold:', 
                   min=-70, max=0, value=-5)
     }
     elem
