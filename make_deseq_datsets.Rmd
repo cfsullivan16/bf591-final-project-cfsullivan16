@@ -1,0 +1,130 @@
+---
+title: "Creating DESeq2 Datasets"
+author: "Caroline Sullivan"
+date: "2023-05-08"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+source("analysis.R")
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+```{r getting metadata}
+meta <- get_md()
+meta_filtered <- filter_md(meta)
+head(meta_filtered)
+```
+```{r prep counts data}
+counts <- get_data(meta)
+
+male_counts = counts[1][[1]]
+female_counts = counts[2][[1]]
+larvae_counts = counts[3][[1]]
+all_counts = counts[4][[1]]
+
+head(counts['All'])
+
+```
+``` {r deseq datasets for male group}
+
+# get col data
+cd_m <- get_col_data(male_counts, meta, "Male")
+
+# make deseqdataset object
+dds_m <- DESeqDataSetFromMatrix(countData = as.matrix(male_counts[,rownames(cd_m)]),
+                                colData = cd_m,
+                                design = ~ timepoint + condition + timepoint:condition)
+
+# filter for rows with at least the number of reads indicated by count_filter
+keep <- rowSums(counts(dds_m)) >= 10
+dds_m <- dds_m[keep,]
+
+# do differential expression analysis
+dds_m <- DESeq(dds_m, test="LRT", reduced=~ timepoint + condition)
+
+# we already have the lrt results, so now we need to extract and save the results for the
+# Wald tests at each individual timepoint
+res0_m <- results(dds_m, test="Wald", name="condition_fluctuating_vs_control")
+res1_m <- results(dds_m, test="Wald", name="timepointlow2.conditionfluctuating")
+res2_m <- results(dds_m, test="Wald", name="timepointhigh3.conditionfluctuating")
+res3_m <- results(dds_m, test="Wald", name="timepointlow3.conditionfluctuating")
+
+```
+
+```{r save male DESeq2}
+
+saveRDS(res0_m, 'objects/deseq_m_h2')
+saveRDS(res1_m, 'objects/deseq_m_l2')
+saveRDS(res2_m, 'objects/deseq_m_h3')
+saveRDS(res3_m, 'objects/deseq_m_l3')
+
+```
+
+``` {r deseq datasets for female group}
+
+# get col data
+cd_f <- get_col_data(female_counts, meta, "Female")
+
+# make deseqdataset object
+dds_f <- DESeqDataSetFromMatrix(countData = as.matrix(female_counts[,rownames(cd_f)]),
+                                colData = cd_f,
+                                design = ~ timepoint + condition + timepoint:condition)
+
+# filter for rows with at least the number of reads indicated by count_filter
+keep <- rowSums(counts(dds_f)) >= 10
+dds_f <- dds_f[keep,]
+
+# do differential expression analysis
+dds_f <- DESeq(dds_f, test="LRT", reduced=~ timepoint + condition)
+
+# we already have the lrt results, so now we need to extract and save the results for the
+# Wald tests at each individual timepoint
+res0_f <- results(dds_f, test="Wald", name="condition_fluctuating_vs_control")
+res1_f <- results(dds_f, test="Wald", name="timepointlow2.conditionfluctuating")
+res2_f <- results(dds_f, test="Wald", name="timepointhigh3.conditionfluctuating")
+res3_f <- results(dds_f, test="Wald", name="timepointlow3.conditionfluctuating")
+
+```
+
+```{r save female DESeq2}
+
+saveRDS(res0_f, 'objects/deseq_f_h2')
+saveRDS(res1_f, 'objects/deseq_f_l2')
+saveRDS(res2_f, 'objects/deseq_f_h3')
+saveRDS(res3_f, 'objects/deseq_f_l3')
+
+```
+
+``` {r deseq datasets for larvae group}
+
+# get col data
+cd_l <- get_col_data(larvae_counts, meta, "Larvae")
+
+# make deseqdataset object
+dds_l <- DESeqDataSetFromMatrix(countData = as.matrix(larvae_counts[,rownames(cd_l)]),
+                                colData = cd_l,
+                                design = ~ timepoint + condition + timepoint:condition)
+
+# filter for rows with at least the number of reads indicated by count_filter
+keep <- rowSums(counts(dds_l)) >= 10
+dds_l <- dds_l[keep,]
+
+# do differential expression analysis
+dds_l <- DESeq(dds_l, test="LRT", reduced=~ timepoint + condition)
+
+# we already have the lrt results, so now we need to extract and save the results for the
+# Wald tests at each individual timepoint
+res0_l <- results(dds_l, test="Wald", name="condition_fluctuating_vs_control")
+res1_l <- results(dds_l, test="Wald", name="timepointlow1.conditionfluctuating")
+
+```
+
+```{r save larvae DESeq2}
+
+saveRDS(res0_l, 'objects/deseq_l_h1')
+saveRDS(res1_l, 'objects/deseq_l_l1')
+
+```

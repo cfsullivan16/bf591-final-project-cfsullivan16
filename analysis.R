@@ -312,23 +312,28 @@ plot_heatmap <- function(counts_data, meta, slider_var, slider_nonzero){
                                           (Sex.ch1 == 'unknown') ~ 'gray'))
   
   # Add extra space to right of plot area; change clipping to figure
-  par(mar=c(5.1, 4.2, 4.1, 8.4), xpd=TRUE)
+  par(mar=c(5, 4, 2, 6))
   
   gplots::heatmap.2(as.matrix(counts_log_scale), 
-                           scale="row",
-                           labCol=FALSE,
-                           labRow=FALSE,
-                           key=TRUE,
-                           trace="none",
-                           ColSideColors=meta$color_bar,
-                           col=brewer.pal(11, "RdYlBu"))
+                    scale="row",
+                    labCol=FALSE,
+                    labRow=FALSE,
+                    key=TRUE,
+                    trace="none",
+                    ColSideColors=meta$color_bar,
+                    col=brewer.pal(11, "RdYlBu"),
+                    main='Log2-Scaled Counts')
   
-  legend("topright", inset=c(-0.3,-0.3), title = "Sample Group",
+  legend("bottomright", title = "Sample Group",
          legend=c("Male","Female", "Larvae"), 
-         fill=c("purple","orange", "gray"), cex=0.8, box.lty=0)
+         fill=c("purple","orange", "gray"),
+         inset=c(-0.1,0.88),
+         xpd=TRUE, cex=0.9,
+         bty="n")
+
 }
 
-plot_pca <- function(counts_data, meta, dim1, dim2){
+plot_pca <- function(counts_data, meta, dim1, dim2, color, shape){
   
   # get normalized version of counts matrix
   counts_data <- normalize_by_cpm(as_tibble(counts_data, rownames='gene'))
@@ -353,21 +358,24 @@ plot_pca <- function(counts_data, meta, dim1, dim2){
   md_cut <- meta %>% 
     dplyr::select("treatment.ch1", "Sex.ch1", "timepoint.ch1", "geo_accession", "title")
   
+  # adjust row and column names
+  colnames(md_cut) <- c('Treatment', 'Sex', 'Timepoint', "geo_accession", "title")
+  
   row.names(md_cut) <- md_cut$title
   
   # ready to make plot
   pca_biplot <- pca_results$x %>%
     merge(md_cut, by = 'row.names') %>% # add metadata
-    ggplot(aes(x=!!sym(paste('PC', dim1, sep='')), y=!!sym(paste('PC', dim2, sep='')), color=treatment.ch1, shape=Sex.ch1)) +
+    ggplot(aes(x=!!sym(paste('PC', dim1, sep='')), y=!!sym(paste('PC', dim2, sep='')), color=!!sym(color), shape=!!sym(shape))) +
     geom_point(size=2) +
-    theme_classic(base_size = 16) +
-    ggtitle(paste("Raw Counts PCA for", 'PC', dim1, 'vs.', 'PC', dim2)) +
+    theme_classic(base_size = 14) +
+    ggtitle(paste("PCA for", 'PC', dim1, 'vs.', 'PC', dim2, "CPM-normalized and log10-scaled counts")) +
     labs(x=paste('PC', dim1, ': ', percent_explained[dim1], '% variance', sep=""),
          y=paste('PC', dim2, ': ', percent_explained[dim2], '% variance', sep=""),
-         color='Treatment',
-         shape='Sex') +
-    scale_shape_discrete(labels=c('Female', 'Male', 'Larvae')) +
-    scale_colour_brewer(palette="Dark2", labels=c('Control', 'Fluctuating'))
+         color=color,
+         shape=shape) +
+    scale_shape_discrete(labels=c(unique(md_cut[shape]))) +
+    scale_colour_brewer(palette="Dark2", labels=c(unique(md_cut[color])))
   
   return(pca_biplot)
   
@@ -487,15 +495,16 @@ clustering <- function(dataset, counts, meta, deseq_results, padj_cutoff, minc){
                           metadata = col_data, 
                           time = "timepoint", 
                           col="condition",
+                          scale=TRUE,
                           minc=minc)
   
   return(clusters)
 }
 
 # make plots for each of the clusters tracking gene expression over time
-cluster_full_plot <- function(clusters, dataset){
+cluster_full_plot <- function(clusters){
   # set degree and level according to dataset
-  if (dataset == "Larvae"){
+  if (length(levels(clusters$plot$data$timepoint)) == 2){
     degree <- 1
     level <- c('high1', 'low1')
   } else {
@@ -551,7 +560,7 @@ get_summary_data <- function(clusters){
 }
 
 # make the timecourse heatmap
-timecourse_heatmap <- function(clusters, counts, dataset){
+timecourse_heatmap <- function(clusters){
   
   # get metadata and z score gene abundance values
   md <- clusters$normalized[,c('genes', 'merge', 'value', 'condition', 'timepoint', 'cluster')]
@@ -564,7 +573,7 @@ timecourse_heatmap <- function(clusters, counts, dataset){
   plot_data <- subset(plot_data, select=-c(genes))
 
   # re-order the columns for graphing and get colsidecolors
-  if (dataset == 'Larvae'){
+  if (length(levels(clusters$plot$data$timepoint)) == 2){
     order <- c('controlhigh1', 'controllow1', 
                'fluctuatinghigh1', 'fluctuatinglow1')
     col_colors <- rep(c('green','red'),each=2)
@@ -606,17 +615,28 @@ timecourse_heatmap <- function(clusters, counts, dataset){
                     ColSideColors=col_colors,
                     RowSideColors=row_order_df$colors,
                     srtCol=28,
-                    col=brewer.pal(11, "RdYlBu"))
+                    col=brewer.pal(11, "RdYlBu"),
+                    main='z-score of gene abundance by cluster')
   
-  legend("topright", inset=c(-0.3,-0.3), title = "Condition",
+  legend("bottomright", title = "Condition",
          legend=c("control","fluctuating"), 
-         fill=c("green","red"), cex=0.8, box.lty=0)
+         fill=c("green","red"),
+         inset=c(-0.1,0.88),
+         xpd=TRUE, cex=0.9,
+         bty="n")
+  
+  legend("bottomright", title="Clusters",
+         legend=unique(row_order_df[c('cluster', 'colors')])$cluster,
+         fill=unique(row_order_df[c('cluster', 'colors')])$colors,
+         inset=c(0.88,0.1),
+         xpd=TRUE, cex=0.9,
+         bty="n")
   
 }
 
 # show z-score gene abundance for individual gene of interest
 # make plots for each of the clusters tracking gene expression over time
-cluster_gene_plot <- function(clusters, dataset, gene_name){
+cluster_gene_plot_agg <- function(clusters, dataset, gene_name){
   # set degree and level according to dataset
   if (dataset == "Larvae"){
     level <- c('high1', 'low1')
@@ -652,10 +672,10 @@ cluster_gene_plot <- function(clusters, dataset, gene_name){
 }
 
 
-# alt version
-cluster_gene_plot2 <- function(clusters, dataset, col_dat, gene_name){
+# alt version - uses individual counts from each replicate
+cluster_gene_plot <- function(clusters, col_dat, gene_name){
   # set degree and level according to dataset
-  if (dataset == "Larvae"){
+  if (length(levels(clusters$plot$data$timepoint)) == 2){
     level <- c('high1', 'low1')
   } else {
     level <- c('high2', 'low2', 'high3', 'low3')
@@ -669,7 +689,7 @@ cluster_gene_plot2 <- function(clusters, dataset, col_dat, gene_name){
   # add the metadata
   plot_data <- cbind(plot_data, col_dat)
   colnames(plot_data) <- c('value', 'condition', 'timepoint')
-  plot_data$line_group <- paste(pd$condition, pd$timepoint, sep="_")
+  plot_data$line_group <- paste(plot_data$condition, plot_data$timepoint, sep="_")
   
   plot <- plot_data %>%
     ggplot(mapping = aes(x=factor(timepoint,level=level), 
@@ -684,7 +704,7 @@ cluster_gene_plot2 <- function(clusters, dataset, col_dat, gene_name){
     geom_line(mapping=aes(group=condition), alpha=0.7) +
     
     labs(x="",
-         y='Z-score of gene abundance',
+         y='vst normalized gene expression values',
          title=paste('Expression Over Time for', gene_name)) +
     
     theme_bw() +
@@ -733,7 +753,7 @@ clustering_masigpro <- function(counts, coldat, degree, k){
                   design, 
                   Q = 0.05, 
                   MT.adjust = "BH", 
-                  min.obs = 20, 
+                  min.obs = 10, 
                   counts=TRUE)
   
   # do stepwise regression

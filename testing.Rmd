@@ -63,12 +63,17 @@ print(counts_heatmap)
 ```
 
 ```{r pca}
-pca_biplot <- plot_pca(all_counts, meta, 1, 2)
+pca_biplot <- plot_pca(larvae_counts, meta, 3, 4, 'Timepoint', 'Treatment')
 print(pca_biplot)
 
 ```
 
 ```{r DESeq2}
+
+# getting overall LRT DESeq2 results - low p value will be for genes for which gene expression
+# over time is different between fluctuation and control groups. LogFC in this case corresponds
+# to baseline expression
+
 deseq_results_male <- run_deseq(male_counts, get_col_data(male_counts, meta, 'Male'), 
                                 10, "condition_fluctuating_vs_control")
 
@@ -76,15 +81,22 @@ deseq_results_female <- run_deseq(female_counts, get_col_data(female_counts, met
                                   10, "condition_fluctuating_vs_control")
 
 deseq_results_larvae <- run_deseq(larvae_counts, get_col_data(larvae_counts, meta, 'Larvae'), 
-                                 10, "condition_fluctuating_vs_control")
+                                  10, "condition_fluctuating_vs_control")
+
+```
+
+```{r save DESeq2}
+
+saveRDS(deseq_results_male, 'objects/deseq_m_fluctvsctrl')
+saveRDS(deseq_results_female, 'objects/deseq_f_fluctvsctrl')
+saveRDS(deseq_results_larvae, 'objects/deseq_l_fluctvsctrl')
 
 ```
 
 ```{r load DESeq2 res}
+
 deseq_results_male <- readRDS('objects/deseq_m_fluctvsctrl')
-
 deseq_results_female <- readRDS('objects/deseq_f_fluctvsctrl')
-
 deseq_results_larvae <- readRDS('objects/deseq_l_fluctvsctrl')
 
 ```
@@ -118,32 +130,37 @@ print(volc_plot)
 ```
 
 ```{r clustering method 1}
-clustering_female <- clustering('Female', female_counts, meta, deseq_results_female, -5, 40)
+clustering_female <- clustering('Male', male_counts, meta, deseq_results_male, -5, 30)
                      
 ```
 ``` {r cluster plot}
 
-cluster_full_plot(clustering_female, "Female")
+cluster_full_plot(clustering_female)
 
 ```
 ```{r timecourse heatmap}
 
-female_timecourse <- timecourse_heatmap(clustering_female, female_counts, "Female")
+female_timecourse <- timecourse_heatmap(clustering_female)
    
 ```
 ```{r plotting counts data for indivdual genes}
 
-cluster_gene_plot2(clustering_female, 
-                   "Female", 
+cluster_gene_plot(clustering_female, 
                    get_col_data(female_counts, meta, "Female"),
                    'FBgn0003068')
 
 ```
+```{r clustering summary data}
+sum <- get_summary_data(clustering_female)
+
+head(sum)
+
+```
 
 ```{r clustering method 2}
-clustering_malev2 <- clustering_masigpro(male_counts, 
-                                         get_col_data(male_counts, meta, "Male"), 
-                                         2, 9)
+clustering_malev2 <- clustering_masigpro(larvae_counts, 
+                                         get_col_data(larvae_counts, meta, "Larvae"), 
+                                         1, 4)
                      
 
 ```

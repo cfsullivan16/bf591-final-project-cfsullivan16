@@ -10,16 +10,17 @@ library(shiny)
 library(colourpicker)
 library(DT)
 library(shinycssloaders)
+library(shinythemes)
 
 options(shiny.maxRequestSize=6*1024^2)
 
 # Define UI for application that draws a histogram
-ui <- fluidPage(
+ui <- fluidPage(theme = shinytheme("yeti"),
   
   # Define title for the app and explain usage
   titlePanel(
     div(h2('Molecular mechanisms underlying plasticity in a thermally varying environment'), 
-        h4("To use this application first upload the sample information under the samples
+        h4("To use this application, first upload the sample information under the samples
            tab and the counts information under the counts tab. Then, navigate through the
            tabs and subtabs to explore the results."))
   ),
@@ -87,23 +88,6 @@ ui <- fluidPage(
                  #            'Choose whether to disaggregate by male, female, larval:',
                  #              choices=c('Aggregate', 'Disaggregate'),
                  #              selected='Aggregate'),
-                 numericInput(
-                   'counts_pcdim1',
-                   'Select Principal Component for the x-axis:',
-                   1,
-                   min = 1,
-                   max = 80,
-                   step = 1,
-                 ),
-                 
-                 numericInput(
-                   'counts_pcdim2',
-                   'Select Principal Component for the y-axis:',
-                   2,
-                   min = 1,
-                   max = 80,
-                   step = 1,
-                 ),
                  
                  # plot button
                  actionButton('counts_button', 'Plot', icon= icon('chart-line'), width='100%'),
@@ -122,7 +106,45 @@ ui <- fluidPage(
                    tabPanel("Heatmap",
                             withSpinner(plotOutput("counts_heatmap"))),
                    tabPanel("PCA",
-                            withSpinner(plotOutput("counts_pca")))
+                            # sidebar with PCA input options
+                            sidebarLayout(
+                              sidebarPanel(
+                                numericInput(
+                                  'counts_pcdim1',
+                                  'Select Principal Component for the x-axis:',
+                                  1,
+                                  min = 1,
+                                  max = 80,
+                                  step = 1,
+                                ),
+                                
+                                numericInput(
+                                  'counts_pcdim2',
+                                  'Select Principal Component for the y-axis:',
+                                  2,
+                                  min = 1,
+                                  max = 80,
+                                  step = 1,
+                                ),
+                                
+                                selectInput('pca_color', 
+                                            'Choose a color variable:',
+                                            choices=c('Sex', 'Treatment', 'Timepoint'),
+                                            selected='Treatment'),
+                                
+                                selectInput('pca_shape', 
+                                            'Choose a symbol variable:',
+                                            choices=c('Sex', 'Treatment', 'Timepoint'),
+                                            selected='Sex'),
+                                
+                                # plot button
+                                actionButton('pca_button', 'Update PCA', icon= icon('chart-line'), width='100%')
+                              ),
+                              mainPanel(
+                                withSpinner(plotOutput("counts_pca")))
+                              )
+                            )
+                   
                )
              ))
     ),
@@ -140,13 +162,16 @@ ui <- fluidPage(
                                choices=c('Male', 'Female', 'Larvae'),
                                selected='Male'),
                  
+                 # options for comparison will depend on the radio button selection
+                 uiOutput('de_comparison'),
+                 
                  # slider
                  sliderInput('de_slider', 
                              'Select the magnitude of the p adjusted cutoff for each of the following analyses:', 
                              min=-80, max=0, value=-2),
                  
                  # plot button
-                 actionButton('de_button', 'Plot', icon= icon('chart-line'), width='100%'),
+                 actionButton('de_button', 'Get Dataset', icon= icon('chart-line'), width='100%'),
                  width=3              
                ),
                
@@ -220,17 +245,19 @@ ui <- fluidPage(
                # SIDEBAR: COUNTS DATA INPUT
                sidebarPanel(
                  # file input
-                 h5(tags$b('Select a dataset to analyze. Use the sliders to specify a significance threshold.')),
+                 h5(tags$b('Select a dataset to analyze. Use the sliders to specify a 
+                           significance threshold and the minimum required genes per cluster.')),
                  # radio buttons
                  radioButtons('cluster_dataset', 
                               'Select a dataset for gene clustering:',
                               choices=c('Male', 'Female', 'Larvae'),
                               selected='Male'),
                  
-                 # sliders
-                 sliderInput('cluster_pval', 
-                             'Select the p-value threshold:', 
-                             min=-80, max=0, value=-2),
+                 # suggested pval and minc will change based on dataset chosen
+                 uiOutput('cluster_pval_suggest'),
+                 
+                 # options for comparison will depend on the radio button selection
+                 uiOutput('cluster_minc_suggest'),
                  
                  # plot button
                  actionButton('cluster_button', 'Plot', icon= icon('chart-line'), width='100%'),
@@ -241,28 +268,105 @@ ui <- fluidPage(
                mainPanel(
                  headerPanel(""),
                  tabsetPanel(
-                   tabPanel("Test",
-                            DT::dataTableOutput("cluster_test", width="100%")),
-                   tabPanel("Heatmap?",
-                            withSpinner(plotOutput("cluster_heatmap"))),
+                   tabPanel("Cluster Summary",
+                            withSpinner(DT::dataTableOutput("cluster_info", width="100%"))),
                    tabPanel("Cluster Plots",
                             withSpinner(plotOutput("cluster_plots"))),
+                   tabPanel("Timecourse Heatmap",
+                            withSpinner(plotOutput("cluster_heatmap"))),
+                   
                    tabPanel("Individual Gene",
-                            withSpinner(plotOutput("cluster_gene")))
+                            # sidebar with gene input option
+                            sidebarLayout(
+                              sidebarPanel(
+                                h5(tags$b('Track expression of a gene of interest for all replicates
+                                          across timepoints.')),
+                                
+                                textInput('cluster_gene_input',
+                                          'Enter an individual gene name:',
+                                          width='100%',
+                                          placeholder='ex. FBgn0003068'),
+                                # plot button
+                                actionButton('cluster_gene_button', 'Plot', icon= icon('chart-line'), width='100%')
+                                
+                              ),
+                              mainPanel(
+                                withSpinner(plotOutput("cluster_gene")))
+                              )
+                            )
+                            
                  )
                ))
     ),
 
-    ########## TAB 5 IF TIME: GSEA ########## 
-    tabPanel("GSEA?",
-             # tableOutput('table'),
-    )
+    ########## TAB 5 - UNDER DEVELOPMENT: GSEA ########## 
+    #tabPanel("GSEA?",
+    #         # tableOutput('table'),
+    #)
   )
 )
 
 
 # Define server logic required to draw a histogram
 server <- function(input, output) {
+  ### DEFINING UI OUTPUTS ###
+  output$de_comparison <- renderUI({
+    
+    if(input$de_choice == 'Larvae'){
+      elem <- radioButtons('de_comparison_choice', 
+                           'Select a comparison:',
+                           choices=c('Full vs. reduced model (LRT)', 
+                                     'Fluctuating vs. Control at High1 (Wald)', 
+                                     'Fluctuating vs. Control at Low1 (Wald)'),
+                           selected='Full vs. reduced model (LRT)')
+    } else{
+      elem <- radioButtons('de_comparison_choice', 
+                           'Select a comparison:',
+                           choices=c('Full vs. reduced model (LRT)', 
+                                     'Fluctuating vs. Control at High2 (Wald)', 
+                                     'Fluctuating vs. Control at Low2 (Wald)',
+                                     'Fluctuating vs. Control at High3 (Wald)', 
+                                     'Fluctuating vs. Control at Low3 (Wald)'),
+                           selected='Full vs. reduced model (LRT)')
+    }
+    elem
+  })
+  
+  output$cluster_pval_suggest <- renderUI({
+    if(input$cluster_dataset == 'Larvae'){
+      elem <- sliderInput('cluster_pval', 
+                          'Select the p-value threshold:', 
+                          min=-55, max=0, value=-2)
+      
+    } else if(input$cluster_dataset == 'Male'){
+      elem <- sliderInput('cluster_pval', 
+                          'Select the p-value threshold:', 
+                          min=-130, max=0, value=-5)
+    } else{
+      sliderInput('cluster_pval', 
+                  'Select the p-value threshold:', 
+                  min=-70, max=0, value=-5)
+    }
+    elem
+  })
+
+  output$cluster_minc_suggest <- renderUI({
+    if(input$cluster_dataset == 'Larvae'){
+      elem <- sliderInput('cluster_minc', 
+                          'Select the minimum number of genes per cluster:', 
+                          min=0, max=50, value=10)
+      
+    } else if(input$cluster_dataset == 'Male'){
+      elem <- sliderInput('cluster_minc', 
+                          'Select the minimum number of genes per cluster:', 
+                          min=0, max=100, value=30)
+    } else{
+      sliderInput('cluster_minc', 
+                  'Select the minimum number of genes per cluster:', 
+                  min=0, max=100, value=30)
+    }
+    elem
+  })
   
   ### LOADING THE SAMPLE DATA ###
   load_sample_data <- reactive({
@@ -300,6 +404,7 @@ server <- function(input, output) {
   
   ### LOADING THE DE DATA ###
   load_de_data <- reactive({
+    # first, see if male, female, or larvae was chosen
     if (input$de_choice == 'Male'){
       id <- 'm'
     } else if (input$de_choice == 'Female'){
@@ -307,9 +412,26 @@ server <- function(input, output) {
     } else if (input$de_choice == 'Larvae'){
       id <- 'l'
     }
-  
+    
+    # then, see what comparison was chosen
+    if (input$de_comparison_choice == 'Full vs. reduced model (LRT)'){
+      comp <- 'fluctvsctrl'
+    } else if (input$de_comparison_choice == 'Fluctuating vs. Control at High1 (Wald)'){
+      comp <- 'h1'
+    } else if (input$de_comparison_choice == 'Fluctuating vs. Control at Low1 (Wald)'){
+      comp <- 'l1'
+    } else if (input$de_comparison_choice == 'Fluctuating vs. Control at High2 (Wald)'){
+      comp <- 'h2'
+    } else if (input$de_comparison_choice == 'Fluctuating vs. Control at Low2 (Wald)'){
+      comp <- 'l2'
+    } else if (input$de_comparison_choice == 'Fluctuating vs. Control at High3 (Wald)'){
+      comp <- 'h3'
+    } else if (input$de_comparison_choice ==  'Fluctuating vs. Control at Low3 (Wald)'){
+      comp <- 'l3'
+    }
+      
     # get the user-selected DESeq2 results and change to proper format
-    deseq_res <- readRDS(paste('objects/deseq_', id, '_fluctvsctrl', sep=""))
+    deseq_res <- readRDS(paste('objects/deseq_', id, '_', comp, sep=""))
     deseq_df <- as.data.frame(deseq_res)
     
     return(deseq_df)
@@ -381,6 +503,24 @@ server <- function(input, output) {
         return(larvae_counts)
       }
     })
+    
+  })
+  
+  ### LOADING THE CLUSTERING DE DATA ###
+  # in this case we use fluct vs ctrl as default b/c we want the LRT comparison
+  load_cluster_de_data <- reactive({
+    if (input$cluster_dataset == 'Male'){
+      deseq_res <- readRDS('objects/deseq_m_fluctvsctrl')
+    } else if (input$cluster_dataset == 'Female'){
+      deseq_res <- readRDS('objects/deseq_f_fluctvsctrl')
+    } else if (input$cluster_dataset == 'Larvae'){
+      deseq_res <- readRDS('objects/deseq_l_fluctvsctrl')
+    }
+    
+    # get the user-selected DESeq2 results and change to proper format
+    deseq_df <- as.data.frame(deseq_res)
+    
+    return(deseq_df)
     
   })
     
@@ -514,7 +654,7 @@ server <- function(input, output) {
       req(input$sample_data)
       req(input$counts_data)
       
-      input$counts_button
+      input$pca_button
       
       counts <- load_counts_data()
       md <- load_sample_data()
@@ -523,10 +663,22 @@ server <- function(input, output) {
         plot_pca(counts,
                  md,
                  input$counts_pcdim1,
-                 input$counts_pcdim2)
+                 input$counts_pcdim2,
+                 input$pca_color,
+                 input$pca_shape)
       })
       
-    }, width=700, height=500)
+    })
+    
+    ### CREATE EVENT REACTIVE FOR GETTING DESEQ2 DATASET ###
+    get_deseq_selection <- eventReactive(input$de_button,{
+      # require file inputs
+      req(input$counts_data)
+      req(input$sample_data)
+      
+      return(load_de_data())
+      
+    })
     
     ### MAKING DE DATA TABLE ###
     output$de_results <- DT::renderDataTable({
@@ -537,10 +689,10 @@ server <- function(input, output) {
       # take a dependency on the plot button
       input$de_button
       
+      # get the data
+      de <- get_deseq_selection()
+      
       isolate({
-      # load in data given selected dataset
-      # need to isolate b/c radio button used in load_de_data()
-      de <- load_de_data()
       
       de_filtered <- de %>%
         dplyr::filter(padj < 1 * 10^input$de_slider)
@@ -565,19 +717,17 @@ server <- function(input, output) {
       req(input$counts_data)
       req(input$sample_data)
       
-      # take dependency on input$plotbutton
+      # take dependency on volcano-specific button
       input$de_button
       
-      isolate({
-        data <- load_de_data()
+      data <- get_deseq_selection()
         
         volcano(data, 
                 input$de_x_axis, 
                 input$de_y_axis, 
-                input$de_slider,
+                isolate({input$de_slider}),
                 input$de_base,
                 input$de_highlight)
-      })
       
     }, height=500)
     
@@ -587,49 +737,147 @@ server <- function(input, output) {
       req(input$counts_data)
       req(input$sample_data)
       
-      # take dependency on de diagram button
+      # take dependency on input$plotbutton
       input$de_button
       
-      isolate({
-        
+      # can't necessary compare all 3 for a given timepoint, so we'll just use full vs. reduced model
       data <- load_de_venn_data()
       
       # warn user instead of having error message pop up
       validate(need(length(data) >= 2, "Must select at least 2 datasets for venn diagram."))
       
+      isolate({
       # get the de gene names (padj selected)
       gene_names <- lapply(data, de_genes, padj_cutoff=input$de_slider)
 
       ggVennDiagram(x=gene_names) +
-        ggtitle('Differentially Expressed Transcripts fluctuating vs. control') +
+        ggtitle(paste('Differentially Expressed Transcripts for padj<', input$de_slider),
+                subtitle="Full vs. Reduced Model (LRT)") +
         scale_x_continuous(expand = expansion(mult = .2)) +
         theme(plot.title = element_text(face = "bold"))
-      
       })
     })
     
-    ### TESTING COUNTS DATA LOADED CORRECTLY ###
-    output$cluster_test <- DT::renderDataTable({
+    ### CREATE EVENT REACTIVE FOR DOING A NEW CLUSTERING THAT CAN BE USED ACROSS TABS ###
+    make_new_clusters <- eventReactive(input$cluster_button,{
+      # require file inputs
+      req(input$counts_data)
+      req(input$sample_data)
+      
+      # get data
+      counts <- load_cluster_data()
+      meta <- load_sample_data()
+      deseq_results <- load_cluster_de_data()
+      
+      # do the clustering
+      cluster_obj <- clustering(input$cluster_dataset, 
+                                counts, 
+                                meta, 
+                                deseq_results, 
+                                input$cluster_pval, 
+                                input$cluster_minc)
+      
+    })
+
+    ### GET SUMMARY OF CLUSTERING INFO ###
+    output$cluster_info <- DT::renderDataTable(server=FALSE,{
       # make it so input data is required
       req(input$counts_data)
       req(input$sample_data)
       
-      # take a dependency on the plot button
-      input$cluster_button
-      
-      # load in data
-      counts <- load_cluster_data()
+      # get the cluster object
+      cluster_obj <- make_new_clusters()
       
       # make data table
-      DT::datatable(counts,  options=list(scrollX=TRUE, pageLength=5))
+      DT::datatable(get_summary_data(cluster_obj),
+                    extensions='Buttons',
+                    filter='top',
+                    options=list(
+                    paging=TRUE,
+                    searching=TRUE,
+                    ordering=TRUE,
+                    dom = 'Bfrtip',
+                    columnDefs = list(
+                      list(
+                        targets = 0, className = "rownames"
+                      )),
+                    buttons = list(
+                      list(extend = 'csv', 
+                           filename='cluster_data',
+                           exportOptions=list(columns = ":not(.rownames)"))),
+                    pageLength=10))
       
     })
     
-    ### GET CLUSTERING RESULTS ###
+    ### GET CLUSTERING PLOTS ###
     output$cluster_plots <- renderPlot({
+      # require file inputs
+      req(input$counts_data)
+      req(input$sample_data)
+      
+      # get the cluster object
+      cluster_obj <- make_new_clusters()
+      
+      cluster_full_plot(cluster_obj)
       
     })
     
+    ### GET TIMECOURSE HEATMAP ###
+    output$cluster_heatmap <- renderPlot({
+    # require file inputs
+    req(input$counts_data)
+    req(input$sample_data)
+    
+    # get the cluster object
+    cluster_obj <- make_new_clusters()
+    
+    # make the heatmap
+    timecourse_heatmap(cluster_obj)
+    
+    })
+    
+    ### CREATE EVENT REACTIVE FOR GETTING USER INPUT ###
+    get_gene_name <- eventReactive(input$cluster_gene_button,{
+      # require file inputs
+      req(input$counts_data)
+      req(input$sample_data)
+      
+      # get data
+      return(input$cluster_gene_input)
+      
+    })
+    
+    ### GET INDIVIDUAL GENE PLOT ###
+    output$cluster_gene <- renderPlot({
+      # require file inputs
+      req(input$counts_data)
+      req(input$sample_data)
+      
+      # get the cluster object
+      cluster_obj <- make_new_clusters()
+      
+      # get the user input and make sure it's valid first
+      gene_name <- get_gene_name()
+      validate(need(gene_name %in% cluster_obj$df$genes, 
+                    "Gene name not included in clustering."))
+      
+      # get col data
+      # take dependency on plot button
+      input$cluster_gene_button
+      
+      isolate({
+        
+      counts <- load_cluster_data()
+      meta <- load_sample_data()
+      dataset <- input$cluster_dataset
+        
+      col_dat <- get_col_data(counts, meta, dataset)
+      
+      # make the plot
+      cluster_gene_plot(cluster_obj, col_dat, gene_name)
+        
+      })
+    })
     
     
 }
