@@ -1,7 +1,13 @@
 # bf591-final-project-cfsullivan16
-R Shiny app for data exploration produced by Caroline Sullivan as a final project for BF591: R for Biological Sciences at Boston University.
+### R Shiny app for data exploration produced by Caroline Sullivan as a final project for BF591: R for Biological Sciences at Boston University.
 
-**Data source used:**
+**Data exploration functions include:**
+* Viewing key sample information and breakdown of study design
+* Quality control scatter plots, heatmaps, and PCA plots for normalized counts data with custom filtration options
+* View results of various DESeq2 experiments and visualize differentially expressed genes using volcano plots
+* Cluster groups of genes by expression over time in condition vs. control groups using the DEGreport package and download specific cluster information for further functional analysis
+
+**Data source:**
 
 Salachan, P. V., & Sørensen, J. G. (2022). Molecular mechanisms underlying plasticity in a thermally varying environment. Molecular Ecology, 31(11), 3174–3191. [https://doi.org/10.1111/mec.16463](https://doi.org/10.1111/mec.16463)
 
