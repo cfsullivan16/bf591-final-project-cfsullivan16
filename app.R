@@ -19,7 +19,7 @@ ui <- fluidPage(theme = shinytheme("yeti"),
   
   # Define title for the app and explain usage
   titlePanel(
-    div(h2('Molecular mechanisms underlying plasticity in a thermally varying environment'), 
+    div(h2('Molecular mechanisms underlying plasticity in a thermally varying environment (Salachan and Sørensen, 2022)'), 
         h4("To use this application, first upload the sample information under the samples
            tab and the counts information under the counts tab. Then, navigate through the
            tabs and subtabs to explore the results."))
