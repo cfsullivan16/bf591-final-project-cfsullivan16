@@ -10,6 +10,4 @@ Salachan, P. V., & Sørensen, J. G. (2022). Molecular mechanisms underlying plas
 
 All data used for this project are available for download at GEO accession number [GSE150450](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE150450).
 
-**Video tour**
-
-<div style="position: relative; padding-bottom: 56.25%; height: 0;"><iframe src="https://www.loom.com/embed/d9811e2b2e6a45868797d163ea0a0afc" frameborder="0" webkitallowfullscreen mozallowfullscreen allowfullscreen style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"></iframe></div>
+[**Video tour**](https://www.loom.com/embed/d9811e2b2e6a45868797d163ea0a0afc)
