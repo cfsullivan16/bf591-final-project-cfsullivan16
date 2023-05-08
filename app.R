@@ -342,8 +342,8 @@ server <- function(input, output) {
       elem <- sliderInput('cluster_pval', 
                           'Select the p-value threshold:', 
                           min=-130, max=0, value=-5)
-    } else{
-      sliderInput('cluster_pval', 
+    } else if (input$cluster_dataset == 'Female'){
+      elem <- sliderInput('cluster_pval', 
                   'Select the p-value threshold:', 
                   min=-70, max=0, value=-5)
     }
@@ -360,8 +360,8 @@ server <- function(input, output) {
       elem <- sliderInput('cluster_minc', 
                           'Select the minimum number of genes per cluster:', 
                           min=0, max=100, value=30)
-    } else{
-      sliderInput('cluster_minc', 
+    } else if(input$cluster_dataset == 'Female'){
+      elem <- sliderInput('cluster_minc', 
                   'Select the minimum number of genes per cluster:', 
                   min=0, max=100, value=30)
     }
